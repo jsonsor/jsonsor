@@ -1,0 +1,41 @@
+solution "jsonsor" {
+  "Native dynamic library for efficient JSON schema reconcilation and following data harmonization"
+
+  requirement "RAM Utilization" <= "100 MiB"
+  requirement "Bindings" = ["Python"]
+
+  requirement "Input data format" = ["NDJSON"]
+  requirement "Input compression" = ["gzip"]
+  requirement "Input format" = ["byte-array", "file"]
+  requirement "Input data volume" = ANY
+
+  requirement "Output data format" = ["NDJSON", "Parquet", "Arrow"]
+  requirement "Output format" = "file"
+
+  function "Schema Inference" {
+    "
+    Infers JSON schemas from data. Produces a schema per compatible data batch. 
+    Data is segregated by schemas and retained together with the inferred schema.
+    "
+  }
+
+  function "Schema reconcilation" {
+    "
+    Reconciles inferred and target schemas:
+    - Merges compatible fields
+    - Adds missing fields with null values
+    - Casts convertible types
+    - Lands incompatible type values to separate fields
+    - Separates heterogeneous arrays into multiple homogeneous arrays
+    - Removed fields never removed from the target schema
+    "
+  }
+
+  function "Data Harmonization" {
+    "
+    Harmonizes data to the target reconciled schema. 
+    Produces a single output file for a single input file with all data.
+    No data loss is guaranteed.
+    "
+  }
+}
