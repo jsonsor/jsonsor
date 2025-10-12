@@ -14,8 +14,8 @@ solution "jsonsor" {
 
   function "Schema Inference" {
     "
-    Infers JSON schemas from data. Produces a schema per compatible data batch. 
-    Data is segregated by schemas and retained together with the inferred schema.
+    Infers JSON schemas from data.
+    Groups data by compatible schemas.
     "
   }
 
