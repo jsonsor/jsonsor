@@ -249,8 +249,9 @@ impl ReconciliatingStream {
 
                     match dtype {
                         JsonsorFieldType::String => {
-                            if *byte == b'"' {
-                                // TODO: Not handling escaped quotes yet
+                            // Seek the closing quote, but ignore escaped quotes if there is not
+                            // only the current symbol in the output buffer
+                            if *byte == b'"' && (self.output_buf.len() < 2 || self.output_buf[self.output_buf.len() - 2] != b'\\') {
                                 // reiterate PassingFieldValue with another type to handle
                                 // correctly comma or closing brace after string value
                                 self.current_status = JsonsorStreamStatus::PassingFieldValue {

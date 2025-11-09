@@ -48,7 +48,6 @@ fn test_reconcile_case2() {
 }
 
 #[test]
-#[ignore]
 fn test_reconcile_case3() {
     // TODO: Failing test
     // Test fails on escaped quotes that makes the parser react on the wrong closing brace inside
@@ -69,7 +68,7 @@ fn test_reconcile_case3() {
     println!("Schema: {:?}", reconciliating_stream.schema);
 
     let expected_output =
-        "{\"text\":\"Some text with quotes \\\" inside \", \"another_text\":\"More } ] text\"}";
+        "{\"text\":\"Some text with quotes \\\" {inside} \", \"another_text\":\"More } ] text\"}";
     assert_eq!(String::from_utf8_lossy(&output), expected_output);
 }
 
