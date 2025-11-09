@@ -74,31 +74,11 @@ impl ReconciliatingStream {
             let (is_obj_complete, cursor_shift) = nested_stream.reconcile_object(chunk);
             self.output_buf.extend(nested_stream.output_buf.clone());
             cursor += cursor_shift;
+            self.update_current_field_schema(&nested_stream.schema);
             if !is_obj_complete {
                 // Nested object is not complete yet, push it back to the stack
-                // TODO: schema needs to be updated anyway
                 self.stack.push(nested_stream);
                 return (false, cursor);
-            } else {
-                // nested streams guarantee that the schema is updated and reconciled
-                let updated_nested_type = match self.schema.get(&self.current_field_name_buf) {
-                    Some(JsonsorFieldType::Object { schema: _ }) => JsonsorFieldType::Object {
-                        schema: nested_stream.schema.clone(),
-                    },
-                    Some(JsonsorFieldType::Array { item_type: _ }) => JsonsorFieldType::Array {
-                        item_type: Box::new(nested_stream
-                            .schema
-                            .get(&vec![])
-                            .cloned()
-                            .unwrap_or(JsonsorFieldType::Null)),
-                    },
-                    None => panic!("Field not found in schema when processing nested object"),
-                    _ => panic!("Unsupported field type for nested object"),
-                };
-                self.schema.insert(
-                    self.current_field_name_buf.clone(),
-                    updated_nested_type,
-                );
             }
         }
 
@@ -314,6 +294,26 @@ impl ReconciliatingStream {
         println!("Exiting reconcile_object with cursor at {}", cursor);
         // Chunk is over, but object not complete yet
         return (false, cursor);
+    }
+
+    fn update_current_field_schema(&mut self, updated_schema: &HashMap<Vec<u8>, JsonsorFieldType>) {
+        let updated_nested_type = match self.schema.get(&self.current_field_name_buf) {
+            Some(JsonsorFieldType::Object { schema: _ }) => JsonsorFieldType::Object {
+                schema: updated_schema.clone(),
+            },
+            Some(JsonsorFieldType::Array { item_type: _ }) => JsonsorFieldType::Array {
+                item_type: Box::new(updated_schema
+                               .get(&vec![])
+                               .cloned()
+                               .unwrap_or(JsonsorFieldType::Null)),
+            },
+            None => panic!("Field not found in schema when processing nested object"),
+            _ => panic!("Unsupported field type for nested object"),
+        };
+        self.schema.insert(
+            self.current_field_name_buf.clone(),
+            updated_nested_type,
+        );
     }
 
     fn type_suffix(&self, dtype: &JsonsorFieldType) -> String {

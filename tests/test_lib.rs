@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 #[test]
 fn test_reconcile_case1() {
     let input = b"{\"name\": \"Alice\", \"age\": 30, \"city\": \"Wonderland\"}";
@@ -209,7 +211,7 @@ fn test_streaming_reconciliation2() {
 }
 
 #[test]
-fn test_streaming_conciliation3() {
+fn test_streaming_reconciliation3() {
     let init_schema = std::collections::HashMap::new();
 
     let mut reconciliating_stream = jsonsor::ReconciliatingStream::new(
@@ -241,6 +243,51 @@ fn test_streaming_conciliation3() {
     let output5 = &reconciliating_stream.output_buf;
     print_schema(&reconciliating_stream.schema);
     assert_eq!(String::from_utf8_lossy(&output5), "]}");
+}
+
+#[test]
+fn test_streaming_reconciliation4() {
+    let init_schema = std::collections::HashMap::new();
+
+    let mut reconciliating_stream = jsonsor::ReconciliatingStream::new(
+        0,
+        jsonsor::JsonsorStreamStatus::SeekingObjectStart,
+        init_schema,
+    );
+    reconciliating_stream.reconcile_object(b"{\"meta\": {");
+    let output1 = &reconciliating_stream.output_buf;
+    print_schema(&reconciliating_stream.schema);
+    assert_eq!(reconciliating_stream.schema.get(&b"meta".to_vec()), Some(&jsonsor::JsonsorFieldType::Object { schema: HashMap::new() }));
+    assert_eq!(String::from_utf8_lossy(&output1), "{\"meta\":{");
+
+    reconciliating_stream.reconcile_object(b"\"version\": 1");
+    let output2 = &reconciliating_stream.output_buf;
+
+    print_schema(&reconciliating_stream.schema);
+    let mut output2_schema = HashMap::new();
+    output2_schema.insert(b"version".to_vec(), jsonsor::JsonsorFieldType::Number);
+
+    assert_eq!(reconciliating_stream.schema.get(&b"meta".to_vec()), Some(&jsonsor::JsonsorFieldType::Object { schema: output2_schema }));
+    assert_eq!(String::from_utf8_lossy(&output2), "\"version\":1");
+
+    reconciliating_stream.reconcile_object(b", \"type\": \"example\"}, \"data\":{");
+    let output3 = &reconciliating_stream.output_buf;
+    let mut output3_schema = HashMap::new();
+    output3_schema.insert(b"version".to_vec(), jsonsor::JsonsorFieldType::Number);
+    output3_schema.insert(b"type".to_vec(), jsonsor::JsonsorFieldType::String);
+    assert_eq!(reconciliating_stream.schema.get(&b"meta".to_vec()), Some(&jsonsor::JsonsorFieldType::Object { schema: output3_schema }));
+    print_schema(&reconciliating_stream.schema);
+    assert_eq!(String::from_utf8_lossy(&output3), ", \"type\":\"example\"}, \"data\":{");
+
+    reconciliating_stream.reconcile_object(b"\"items\": [\"item1\"");
+    let output4 = &reconciliating_stream.output_buf;
+    print_schema(&reconciliating_stream.schema);
+    assert_eq!(String::from_utf8_lossy(&output4), "\"items\":[\"item1\"");
+
+    reconciliating_stream.reconcile_object(b", \"item2\"]}}");
+    let output5 = &reconciliating_stream.output_buf;
+    print_schema(&reconciliating_stream.schema);
+    assert_eq!(String::from_utf8_lossy(&output5), ",\"item2\"]}}");
 }
 
 fn print_schema(schema: &std::collections::HashMap<Vec<u8>, jsonsor::JsonsorFieldType>) {
