@@ -24,26 +24,23 @@ solution "jsonsor" {
 
   function "Schema Inference" {
     "
-    Infers JSON schemas from data on fly and reconciliates it as needed based on data types.
+    Infers JSON schemas from data on fly.
 
     Differentiates primitive types: null, boolean, number, string.
     Differentiates complex types: array, object.
-
-    Outputs original stream as is till the detected end of field name.
-    Buffers the following bytes in a stream till value type is detected.
-    Reconciles the schema based on the buffered field name and inferenced type.
-    Correct the name of the field and output it with the buffered value part.
     "
   }
 
   function "Schema reconcilation" {
     "
-    Schema adjustments are backward compatible:
+    Schema reconciliation is performed on fly adjusting the schema of new data.
+    Schema adjustments are always backward compatible.
+
+    - Once faced field never changes
     - All columns are considered nullable
     - Incompatible type values are landed to separate fields
-    - Heterogeneous arrays are harmonized to string arrays
+    - Heterogeneous arrays are harmonized to arrays of structs preserving the type information.
     - Null fields can be excluded from the schema inference
-    - Once faced field never changes
     - Promotable data types are considered compatible
     "
   }

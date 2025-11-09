@@ -123,6 +123,30 @@ fn test_reconcile_nested_arr_case1() {
 }
 
 #[test]
+#[ignore]
+fn test_reconcile_heterogeneous_arr_case1() {
+    // TODO: Failing test. Array type is overridden by each new element of the array. So
+    // effectively, the last element type wins.
+    let input = b"{\"values\": [1, \"two\", 3.0, true, {\"key\": \"value\"}]}";
+    let init_schema = std::collections::HashMap::new();
+
+    let mut reconciliating_stream = jsonsor::ReconciliatingStream::new(
+        0,
+        jsonsor::JsonsorStreamStatus::SeekingObjectStart,
+        init_schema,
+    );
+    let (completed, offset) = reconciliating_stream.reconcile_object(input);
+    // assert_eq!(offset, input.len());
+    assert!(completed);
+    let output = reconciliating_stream.output_buf;
+    println!("Output: {:?}", String::from_utf8_lossy(&output));
+    println!("Schema: {:?}", reconciliating_stream.schema);
+
+    let expected_output = "{\"values__arr__mixed\":[1,\"two\",3.0,true,{\"key\":\"value\"}]}";
+    assert_eq!(String::from_utf8_lossy(&output), expected_output);
+}
+
+#[test]
 fn test_streaming_reconciliation1() {
     let init_schema = std::collections::HashMap::new();
 

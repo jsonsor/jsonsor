@@ -105,7 +105,7 @@ impl ReconciliatingStream {
                     }
                     self.output_buf.push(*byte);
                 }
-                //TODO: support escaping, unicode, etc.
+                //TODO: support unicode
                 JsonsorStreamStatus::SeekingFieldName => {
                     if *byte == b'"' {
                         self.current_status = JsonsorStreamStatus::ParsingFieldName;
@@ -213,9 +213,11 @@ impl ReconciliatingStream {
                         // TODO: WHat to do if expected_type = Null?
                         if self.types_differ(&dtype, expected_type) {
                             let suffix = self.type_suffix(&dtype);
-                            self.current_field_buf.extend_from_slice(suffix.as_bytes());
-                            self.current_field_name_buf
+                            if !self.current_field_name_buf.is_empty() {
+                                self.current_field_buf.extend_from_slice(suffix.as_bytes());
+                                self.current_field_name_buf
                                 .extend_from_slice(suffix.as_bytes());
+                            }
                             // TODO: Should we exclude current_field_buf if it is null?
                         }
                     }
