@@ -7,7 +7,11 @@ fn test_reconcile_case1() {
     init_schema.insert(b"age".to_vec(), jsonsor::JsonsorFieldType::String);
     init_schema.insert(b"city".to_vec(), jsonsor::JsonsorFieldType::Number);
 
-    let mut reconciliating_stream = jsonsor::ReconciliatingStream::new(0, jsonsor::JsonsorStreamStatus::SeekingObjectStart,  init_schema);
+    let mut reconciliating_stream = jsonsor::ReconciliatingStream::new(
+        0,
+        jsonsor::JsonsorStreamStatus::SeekingObjectStart,
+        init_schema,
+    );
     let (is_complete_obj, offset) = reconciliating_stream.reconcile_object(input);
     assert_eq!(offset, input.len());
     assert!(is_complete_obj);
@@ -26,7 +30,11 @@ fn test_reconcile_case2() {
     init_schema.insert(b"price".to_vec(), jsonsor::JsonsorFieldType::Number);
     init_schema.insert(b"in_stock".to_vec(), jsonsor::JsonsorFieldType::String);
 
-    let mut reconciliating_stream = jsonsor::ReconciliatingStream::new(0, jsonsor::JsonsorStreamStatus::SeekingObjectStart, init_schema);
+    let mut reconciliating_stream = jsonsor::ReconciliatingStream::new(
+        0,
+        jsonsor::JsonsorStreamStatus::SeekingObjectStart,
+        init_schema,
+    );
     let (is_complete_obj, offset) = reconciliating_stream.reconcile_object(input);
     assert_eq!(offset, input.len());
     assert!(is_complete_obj);
@@ -38,13 +46,43 @@ fn test_reconcile_case2() {
 }
 
 #[test]
+#[ignore]
+fn test_reconcile_case3() {
+    // TODO: Failing test
+    // Test fails on escaped quotes that makes the parser react on the wrong closing brace inside
+    // the string
+    let input = b"{\"text\": \"Some text with quotes \\\" {inside} \", \"another_text\": \"More } ] text\"}";
+    let init_schema = std::collections::HashMap::new();
+
+    let mut reconciliating_stream = jsonsor::ReconciliatingStream::new(
+        0,
+        jsonsor::JsonsorStreamStatus::SeekingObjectStart,
+        init_schema,
+    );
+    let (is_complete_obj, offset) = reconciliating_stream.reconcile_object(input);
+    assert_eq!(offset, input.len());
+    assert!(is_complete_obj);
+    let output = reconciliating_stream.output_buf;
+    println!("Output: {:?}", String::from_utf8_lossy(&output));
+    println!("Schema: {:?}", reconciliating_stream.schema);
+
+    let expected_output =
+        "{\"text\":\"Some text with quotes \\\" inside \", \"another_text\":\"More } ] text\"}";
+    assert_eq!(String::from_utf8_lossy(&output), expected_output);
+}
+
+#[test]
 fn test_reconcile_nested_obj_case1() {
     let input = b"{\"a\": 123.043, \"x\": {\"y\": 10, \"z\": \"test\"}, \"b\": \"abc\"}";
     let mut init_schema = std::collections::HashMap::new();
     init_schema.insert(b"a".to_vec(), jsonsor::JsonsorFieldType::Number);
     init_schema.insert(b"x".to_vec(), jsonsor::JsonsorFieldType::String);
 
-    let mut reconciliating_stream = jsonsor::ReconciliatingStream::new(0, jsonsor::JsonsorStreamStatus::SeekingObjectStart, init_schema);
+    let mut reconciliating_stream = jsonsor::ReconciliatingStream::new(
+        0,
+        jsonsor::JsonsorStreamStatus::SeekingObjectStart,
+        init_schema,
+    );
     let (completed, offset) = reconciliating_stream.reconcile_object(input);
     assert_eq!(offset, input.len());
     assert!(completed);
@@ -56,15 +94,50 @@ fn test_reconcile_nested_obj_case1() {
 }
 
 #[test]
+fn test_reconcile_nested_arr_case1() {
+    let input = b"{\"items\": [1, 2, 3], \"details\": [{\"name\": \"Item1\", \"price\": 19.99}, {\"name\": \"Item2\", \"price\": 29.99}]}";
+    let mut init_schema = std::collections::HashMap::new();
+    init_schema.insert(b"items".to_vec(), jsonsor::JsonsorFieldType::String);
+    init_schema.insert(
+        b"details".to_vec(),
+        jsonsor::JsonsorFieldType::Array {
+            item_type: Box::new(jsonsor::JsonsorFieldType::String),
+        },
+    );
+
+    let mut reconciliating_stream = jsonsor::ReconciliatingStream::new(
+        0,
+        jsonsor::JsonsorStreamStatus::SeekingObjectStart,
+        init_schema,
+    );
+    let (completed, offset) = reconciliating_stream.reconcile_object(input);
+    assert_eq!(offset, input.len());
+    assert!(completed);
+    let output = reconciliating_stream.output_buf;
+    println!("Output: {:?}", String::from_utf8_lossy(&output));
+    println!("Schema: {:?}", reconciliating_stream.schema);
+
+    let expected_output = "{\"items__arr__num\":[1,2,3], \"details__arr__obj\":[{\"name\":\"Item1\", \"price\":19.99},{\"name\":\"Item2\", \"price\":29.99}]}";
+    assert_eq!(String::from_utf8_lossy(&output), expected_output);
+}
+
+#[test]
 fn test_streaming_reconciliation1() {
     let init_schema = std::collections::HashMap::new();
 
-    let mut reconciliating_stream = jsonsor::ReconciliatingStream::new(0, jsonsor::JsonsorStreamStatus::SeekingObjectStart, init_schema);
+    let mut reconciliating_stream = jsonsor::ReconciliatingStream::new(
+        0,
+        jsonsor::JsonsorStreamStatus::SeekingObjectStart,
+        init_schema,
+    );
     reconciliating_stream.reconcile_object(b"{\"id\": 1, \"value\": \"test\"");
     let output1 = &reconciliating_stream.output_buf;
     print_schema(&reconciliating_stream.schema);
-    assert_eq!(String::from_utf8_lossy(output1), "{\"id\":1, \"value\":\"test\"");
-    
+    assert_eq!(
+        String::from_utf8_lossy(output1),
+        "{\"id\":1, \"value\":\"test\""
+    );
+
     reconciliating_stream.reconcile_object(b", \"active\": true}");
     let output2 = &reconciliating_stream.output_buf;
     print_schema(&reconciliating_stream.schema);
@@ -89,7 +162,10 @@ fn test_streaming_reconciliation1() {
     reconciliating_stream.reconcile_object(b" \"2\", \"value\": null, \"active\": false");
     let output6 = &reconciliating_stream.output_buf;
     print_schema(&reconciliating_stream.schema);
-    assert_eq!(String::from_utf8_lossy(output6), "\"id__str\":\"2\", \"value\":null, \"active\":false");
+    assert_eq!(
+        String::from_utf8_lossy(output6),
+        "\"id__str\":\"2\", \"value\":null, \"active\":false"
+    );
 
     reconciliating_stream.reconcile_object(b"}");
     let output7 = &reconciliating_stream.output_buf;
@@ -101,7 +177,11 @@ fn test_streaming_reconciliation1() {
 fn test_streaming_reconciliation2() {
     let init_schema = std::collections::HashMap::new();
 
-    let mut reconciliating_stream = jsonsor::ReconciliatingStream::new(0, jsonsor::JsonsorStreamStatus::SeekingObjectStart, init_schema);
+    let mut reconciliating_stream = jsonsor::ReconciliatingStream::new(
+        0,
+        jsonsor::JsonsorStreamStatus::SeekingObjectStart,
+        init_schema,
+    );
     reconciliating_stream.reconcile_object(b"{\"x\": {");
     let output1 = &reconciliating_stream.output_buf;
     print_schema(&reconciliating_stream.schema);

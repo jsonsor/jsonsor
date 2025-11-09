@@ -1,6 +1,10 @@
 solution "jsonsor" {
   "
   JSON data harmonization library.
+
+  Notes:
+  - Works only on valid JSON objects
+  - Can remove meaningless space characters
   "
 
   # TODO: Actualize system requirements

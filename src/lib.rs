@@ -8,18 +8,24 @@ pub enum JsonsorFieldType {
     Boolean,
     Null,
     // TODO: Make it better visualizable in debug prints
-    Object{schema: HashMap<Vec<u8>, JsonsorFieldType>},
+    Object {
+        schema: HashMap<Vec<u8>, JsonsorFieldType>,
+    },
+    Array {
+        item_type: Box<JsonsorFieldType>,
+    },
 }
 
 #[derive(Debug)]
 pub enum JsonsorStreamStatus {
     SeekingObjectStart,
+    SeekingArrayStart,
     SeekingFieldName,
     ParsingFieldName,
     SeekingColon,
     SeekingFieldValue,
     InferringFieldValueType,
-    PassingFieldValue {dtype: JsonsorFieldType},
+    PassingFieldValue { dtype: JsonsorFieldType },
     ReachedObjectEnd,
 }
 
@@ -35,7 +41,11 @@ pub struct ReconciliatingStream {
 }
 
 impl<'a> ReconciliatingStream {
-    pub fn new(nested_level: usize, status: JsonsorStreamStatus, schema: HashMap<Vec<u8>, JsonsorFieldType>) -> Self {
+    pub fn new(
+        nested_level: usize,
+        status: JsonsorStreamStatus,
+        schema: HashMap<Vec<u8>, JsonsorFieldType>,
+    ) -> Self {
         Self {
             nested_level,
             stack: Vec::new(),
@@ -54,6 +64,7 @@ impl<'a> ReconciliatingStream {
 
         // clear output buffer for the new chunk
         // TODO: return output buffer
+        // TODO: think how to handle cases of invalid JSON
         self.output_buf.clear();
         let mut cursor = 0;
 
@@ -68,20 +79,35 @@ impl<'a> ReconciliatingStream {
             } else {
                 // nested streams guarantee that the schema is updated and reconciled
                 // TODO: Not ready for the array type
-                self.schema.insert(self.current_field_name_buf.clone(), JsonsorFieldType::Object{
-                    schema: nested_stream.schema.clone()
-                });
+                self.schema.insert(
+                    self.current_field_name_buf.clone(),
+                    JsonsorFieldType::Object {
+                        schema: nested_stream.schema.clone(),
+                    },
+                );
             }
         }
 
         while cursor < chunk.len() {
             let byte = &chunk[cursor];
-            println!("{}[{}] {:?} '{}'", "\t".repeat(self.nested_level), cursor, self.current_status, *byte as char);
+            println!(
+                "{}[{}] {:?} '{}'",
+                "\t".repeat(self.nested_level),
+                cursor,
+                self.current_status,
+                *byte as char
+            );
 
             match &self.current_status {
                 JsonsorStreamStatus::SeekingObjectStart => {
                     if *byte == b'{' {
                         self.current_status = JsonsorStreamStatus::SeekingFieldName;
+                    }
+                    self.output_buf.push(*byte);
+                }
+                JsonsorStreamStatus::SeekingArrayStart => {
+                    if *byte == b'[' {
+                        self.current_status = JsonsorStreamStatus::SeekingFieldValue;
                     }
                     self.output_buf.push(*byte);
                 }
@@ -95,7 +121,6 @@ impl<'a> ReconciliatingStream {
                 JsonsorStreamStatus::ParsingFieldName => {
                     if *byte == b'"' {
                         self.current_status = JsonsorStreamStatus::SeekingColon;
-                        // Here we would normally validate the field name against the schema
                         // TODO: What to do?
                     } else {
                         // TODO: Replace unwanted symbols
@@ -110,8 +135,9 @@ impl<'a> ReconciliatingStream {
                     }
                 }
                 JsonsorStreamStatus::SeekingFieldValue => {
-                    if *byte == b' ' || *byte == b'\n' || *byte == b'\r' || *byte == b'\t' {
-                        // skip whitespace
+                    // TODO: are all space chars covered?
+                    if self.is_space_byte(*byte) {
+                        // skip spaces
                     } else {
                         self.current_status = JsonsorStreamStatus::InferringFieldValueType;
                         continue; // reprocess this byte in the next state
@@ -127,16 +153,24 @@ impl<'a> ReconciliatingStream {
                         b'{' => {
                             // Process the nested object with the nested stream
                             // To be able to process reconciliation on partial chunks later
-                            let nested_stream_init_schema = if let Some(JsonsorFieldType::Object{schema}) = expected_field_type {
-                                schema.clone()
-                            } else {
-                                HashMap::new()
-                            };
+                            let nested_stream_init_schema =
+                                if let Some(JsonsorFieldType::Object { schema }) =
+                                    expected_field_type
+                                {
+                                    schema.clone()
+                                } else {
+                                    HashMap::new()
+                                };
 
-                            let mut nested_stream = ReconciliatingStream::new(self.nested_level + 1, JsonsorStreamStatus::SeekingObjectStart, nested_stream_init_schema);
-                            let (is_complete_obj, processed_bytes_num) = nested_stream.reconcile_object(&chunk[cursor..]);
-                            let inferred_type = JsonsorFieldType::Object{
-                                schema: nested_stream.schema.clone()
+                            let mut nested_stream = ReconciliatingStream::new(
+                                self.nested_level + 1,
+                                JsonsorStreamStatus::SeekingObjectStart,
+                                nested_stream_init_schema,
+                            );
+                            let (is_complete_obj, processed_bytes_num) =
+                                nested_stream.reconcile_object(&chunk[cursor..]);
+                            let inferred_type = JsonsorFieldType::Object {
+                                schema: nested_stream.schema.clone(),
                             };
                             let content = nested_stream.output_buf.clone();
 
@@ -148,23 +182,46 @@ impl<'a> ReconciliatingStream {
                             // processed bytes, not the cursor shift
                             (inferred_type, processed_bytes_num - 1, content)
                         }
-                        _ => panic!("Unexpected byte while inferring field value type: '{}'", *byte as char),
+                        b'[' => {
+                            let mut nested_stream = ReconciliatingStream::new(
+                                self.nested_level + 1,
+                                JsonsorStreamStatus::SeekingArrayStart,
+                                HashMap::new(),
+                            );
+                            let (is_complete_array, processed_bytes_num) =
+                                nested_stream.reconcile_object(&chunk[cursor..]);
+                            let inferred_type = JsonsorFieldType::Array {
+                                // Array item is a field without a name. Valid JSON cannot have an
+                                // empty field name.
+                                item_type: Box::new(
+                                    nested_stream
+                                        .schema
+                                        .get(&vec![])
+                                        .cloned()
+                                        .unwrap_or(JsonsorFieldType::Null),
+                                ),
+                            };
+
+                            let content = nested_stream.output_buf.clone();
+                            if !is_complete_array {
+                                self.stack.push(nested_stream);
+                            }
+                            (inferred_type, processed_bytes_num - 1, content)
+                        }
+                        _ => panic!(
+                            "Unexpected byte while inferring field value type: '{}'",
+                            *byte as char
+                        ),
                     };
 
                     // Do column renaming if type is not expected
                     if let Some(expected_type) = expected_field_type {
                         // TODO: WHat to do if expected_type = Null?
-                        if discriminant(expected_type) != discriminant(&dtype) {
-                            let suffix = match dtype {
-                                JsonsorFieldType::Number => "__num",
-                                JsonsorFieldType::String => "__str",
-                                JsonsorFieldType::Boolean => "__bool",
-                                JsonsorFieldType::Null => "", // nulls are compatible with
-                                                              // any type
-                                JsonsorFieldType::Object {schema: _} => "__obj",
-                            };
+                        if self.types_differ(&dtype, expected_type) {
+                            let suffix = self.type_suffix(&dtype);
                             self.current_field_buf.extend_from_slice(suffix.as_bytes());
-                            self.current_field_name_buf.extend_from_slice(suffix.as_bytes());
+                            self.current_field_name_buf
+                                .extend_from_slice(suffix.as_bytes());
                             // TODO: Should we exclude current_field_buf if it is null?
                         }
                     }
@@ -172,44 +229,59 @@ impl<'a> ReconciliatingStream {
                     cursor += cursor_shift;
 
                     self.output_buf.extend(self.current_field_buf.clone());
-                    self.output_buf.extend_from_slice(b"\":");
+                    // Add colon only if field name is not empty (for arrays)
+                    if !self.current_field_name_buf.is_empty() {
+                        self.output_buf.extend_from_slice(b"\":");
+                    }
                     self.output_buf.extend(content);
 
                     // Reset buffers and status
                     self.current_field_buf.clear();
-                    self.current_status = JsonsorStreamStatus::PassingFieldValue {dtype: dtype.clone()};
+                    self.current_status = JsonsorStreamStatus::PassingFieldValue {
+                        dtype: dtype.clone(),
+                    };
 
-                    if self.schema.contains_key(&self.current_field_name_buf) && dtype == JsonsorFieldType::Null {
+                    if self.schema.contains_key(&self.current_field_name_buf)
+                        && dtype == JsonsorFieldType::Null
+                    {
                         println!("Field '{}' is already in schema, and new value is null. Keeping existing type.", String::from_utf8_lossy(&self.current_field_buf));
                     } else {
-                        self.schema.insert(self.current_field_name_buf.clone(), dtype.clone());
+                        self.schema
+                            .insert(self.current_field_name_buf.clone(), dtype.clone());
                     }
                 }
-                JsonsorStreamStatus::PassingFieldValue{ dtype } => {
+                JsonsorStreamStatus::PassingFieldValue { dtype } => {
                     self.output_buf.push(*byte);
 
                     match dtype {
                         JsonsorFieldType::String => {
                             if *byte == b'"' {
+                                // TODO: Not handling escaped quotes yet
                                 // reiterate PassingFieldValue with another type to handle
                                 // correctly comma or closing brace after string value
-                                self.current_status = JsonsorStreamStatus::PassingFieldValue{dtype: JsonsorFieldType::Null};
+                                self.current_status = JsonsorStreamStatus::PassingFieldValue {
+                                    dtype: JsonsorFieldType::Null,
+                                };
                             }
                         }
                         _ => {
                             // TODO: For non-string types, we assume the value ends with a comma or closing brace
                             match *byte {
                                 b',' => {
-                                    self.current_field_name_buf.clear();
-                                    self.current_status = JsonsorStreamStatus::SeekingFieldName;
+                                    if self.current_field_name_buf.is_empty() {
+                                        self.current_status =
+                                            JsonsorStreamStatus::SeekingFieldValue;
+                                    } else {
+                                        self.current_status = JsonsorStreamStatus::SeekingFieldName;
+                                        self.current_field_name_buf.clear();
+                                    }
                                 }
-                                b'}' => {
+                                b'}' | b']' => {
                                     self.current_field_name_buf.clear();
                                     self.current_status = JsonsorStreamStatus::ReachedObjectEnd;
                                     continue; // reprocess this byte in the next state
                                 }
-                                _ => {
-                                }
+                                _ => {}
                             }
                         }
                     }
@@ -230,4 +302,36 @@ impl<'a> ReconciliatingStream {
         return (false, cursor);
     }
 
+    fn type_suffix(&self, dtype: &JsonsorFieldType) -> String {
+        match dtype {
+            JsonsorFieldType::Number => String::from("__num"),
+            JsonsorFieldType::String => String::from("__str"),
+            JsonsorFieldType::Boolean => String::from("__bool"),
+            JsonsorFieldType::Null => String::from(""), // nulls are compatible with
+            // any type
+            JsonsorFieldType::Object { schema: _ } => String::from("__obj"),
+            JsonsorFieldType::Array { item_type } => {
+                String::from("__arr") + &self.type_suffix(&*item_type)
+            }
+        }
+    }
+
+    fn types_differ(&self, dtype1: &JsonsorFieldType, dtype2: &JsonsorFieldType) -> bool {
+        discriminant(dtype1) != discriminant(&dtype2)
+            || match (dtype1, dtype2) {
+                (
+                    JsonsorFieldType::Array {
+                        item_type: expected_item_type,
+                    },
+                    JsonsorFieldType::Array {
+                        item_type: dtype_item_type,
+                    },
+                ) => self.types_differ(&*expected_item_type, &*dtype_item_type),
+                _ => false,
+            }
+    }
+
+    fn is_space_byte(&self, byte: u8) -> bool {
+        byte == b' ' || byte == b'\n' || byte == b'\r' || byte == b'\t'
+    }
 }

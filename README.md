@@ -2,8 +2,10 @@
 
 > Streaming library for JSON schema reconciliation and data harmonization
 
-Authors: [Evgenii Kozhevnikov](https://github.com/ekvii/jsonsor/commits?author=ekvii)
+Status: Pre-Alpha (proof of concept)
+
+Authored by [Evgenii Kozhevnikov](https://github.com/ekvii/jsonsor/commits?author=ekvii)
 
 ## Architecture
 
-See `./jsonsor.arch`
+See [jsonsor.arch](./jsonsor.arch)
