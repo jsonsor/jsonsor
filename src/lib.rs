@@ -260,7 +260,6 @@ impl ReconciliatingStream {
                             }
                         }
                         _ => {
-                            // TODO: For non-string types, we assume the value ends with a comma or closing brace
                             match *byte {
                                 b',' => {
                                     if self.current_field_name_buf.is_empty() {
