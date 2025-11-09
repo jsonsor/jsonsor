@@ -208,6 +208,41 @@ fn test_streaming_reconciliation2() {
     assert_eq!(String::from_utf8_lossy(&output5), "\"y\":3.14}");
 }
 
+#[test]
+fn test_streaming_conciliation3() {
+    let init_schema = std::collections::HashMap::new();
+
+    let mut reconciliating_stream = jsonsor::ReconciliatingStream::new(
+        0,
+        jsonsor::JsonsorStreamStatus::SeekingObjectStart,
+        init_schema,
+    );
+    reconciliating_stream.reconcile_object(b"{\"data\": [");
+    let output1 = &reconciliating_stream.output_buf;
+    print_schema(&reconciliating_stream.schema);
+    assert_eq!(String::from_utf8_lossy(&output1), "{\"data\":[");
+
+    reconciliating_stream.reconcile_object(b"{\"id\": 1, \"value\": \"A\"},");
+    let output2 = &reconciliating_stream.output_buf;
+    print_schema(&reconciliating_stream.schema);
+    assert_eq!(String::from_utf8_lossy(&output2), "{\"id\":1, \"value\":\"A\"},");
+
+    reconciliating_stream.reconcile_object(b"{\"id\": 2");
+    let output3 = &reconciliating_stream.output_buf;
+    print_schema(&reconciliating_stream.schema);
+    assert_eq!(String::from_utf8_lossy(&output3), "{\"id\":2");
+
+    reconciliating_stream.reconcile_object(b", \"value__num\":200}, {\"id\": 3, \"value\": true}");
+    let output4 = &reconciliating_stream.output_buf;
+    print_schema(&reconciliating_stream.schema);
+    assert_eq!(String::from_utf8_lossy(&output4), ", \"value__num\":200},{\"id\":3, \"value__bool\":true}");
+
+    reconciliating_stream.reconcile_object(b"]}");
+    let output5 = &reconciliating_stream.output_buf;
+    print_schema(&reconciliating_stream.schema);
+    assert_eq!(String::from_utf8_lossy(&output5), "]}");
+}
+
 fn print_schema(schema: &std::collections::HashMap<Vec<u8>, jsonsor::JsonsorFieldType>) {
     println!("Current Schema:");
     for (key, value) in schema {

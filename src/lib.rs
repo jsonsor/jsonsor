@@ -40,7 +40,7 @@ pub struct ReconciliatingStream {
     current_status: JsonsorStreamStatus,
 }
 
-impl<'a> ReconciliatingStream {
+impl ReconciliatingStream {
     pub fn new(
         nested_level: usize,
         status: JsonsorStreamStatus,
@@ -58,13 +58,15 @@ impl<'a> ReconciliatingStream {
     }
 
     pub fn reconcile_object(&mut self, chunk: &[u8]) -> (bool, usize) {
-        // TODO: Use logger
+        // TODO: Reduce number of clones
+        // TODO: Use logger????
         // TODO: Heterogeneous arrays
         // TODO: add support of encypted data
 
-        // clear output buffer for the new chunk
         // TODO: return output buffer
         // TODO: think how to handle cases of invalid JSON
+
+        // clear output buffer for the new chunk
         self.output_buf.clear();
         let mut cursor = 0;
 
@@ -74,16 +76,28 @@ impl<'a> ReconciliatingStream {
             cursor += cursor_shift;
             if !is_obj_complete {
                 // Nested object is not complete yet, push it back to the stack
+                // TODO: schema needs to be updated anyway
                 self.stack.push(nested_stream);
                 return (false, cursor);
             } else {
                 // nested streams guarantee that the schema is updated and reconciled
-                // TODO: Not ready for the array type
-                self.schema.insert(
-                    self.current_field_name_buf.clone(),
-                    JsonsorFieldType::Object {
+                let updated_nested_type = match self.schema.get(&self.current_field_name_buf) {
+                    Some(JsonsorFieldType::Object { schema: _ }) => JsonsorFieldType::Object {
                         schema: nested_stream.schema.clone(),
                     },
+                    Some(JsonsorFieldType::Array { item_type: _ }) => JsonsorFieldType::Array {
+                        item_type: Box::new(nested_stream
+                            .schema
+                            .get(&vec![])
+                            .cloned()
+                            .unwrap_or(JsonsorFieldType::Null)),
+                    },
+                    None => panic!("Field not found in schema when processing nested object"),
+                    _ => panic!("Unsupported field type for nested object"),
+                };
+                self.schema.insert(
+                    self.current_field_name_buf.clone(),
+                    updated_nested_type,
                 );
             }
         }
