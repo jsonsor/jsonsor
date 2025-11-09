@@ -19,7 +19,7 @@ pub enum JsonsorStreamStatus {
     SeekingColon,
     SeekingFieldValue,
     InferringFieldValueType,
-    PassingFieldValue,
+    PassingFieldValue {dtype: JsonsorFieldType},
     ReachedObjectEnd,
 }
 
@@ -34,7 +34,7 @@ pub struct ReconciliatingStream {
     current_status: JsonsorStreamStatus,
 }
 
-impl ReconciliatingStream {
+impl<'a> ReconciliatingStream {
     pub fn new(nested_level: usize, status: JsonsorStreamStatus, schema: HashMap<Vec<u8>, JsonsorFieldType>) -> Self {
         Self {
             nested_level,
@@ -78,7 +78,7 @@ impl ReconciliatingStream {
             let byte = &chunk[cursor];
             println!("{}[{}] {:?} '{}'", "\t".repeat(self.nested_level), cursor, self.current_status, *byte as char);
 
-            match self.current_status {
+            match &self.current_status {
                 JsonsorStreamStatus::SeekingObjectStart => {
                     if *byte == b'{' {
                         self.current_status = JsonsorStreamStatus::SeekingFieldName;
@@ -120,7 +120,7 @@ impl ReconciliatingStream {
                 JsonsorStreamStatus::InferringFieldValueType => {
                     let expected_field_type = self.schema.get(&self.current_field_name_buf);
                     let (dtype, cursor_shift, content) = match *byte {
-                        b'"' | b'\'' => (JsonsorFieldType::String, 0, vec![*byte]),
+                        b'"' => (JsonsorFieldType::String, 0, vec![*byte]),
                         b'n' => (JsonsorFieldType::Null, 0, vec![*byte]),
                         b't' | b'f' => (JsonsorFieldType::Boolean, 0, vec![*byte]),
                         b'0'..=b'9' | b'-' => (JsonsorFieldType::Number, 0, vec![*byte]),
@@ -169,11 +169,6 @@ impl ReconciliatingStream {
                         }
                     }
 
-                    if self.schema.contains_key(&self.current_field_name_buf) && dtype == JsonsorFieldType::Null {
-                        println!("Field '{}' is already in schema, and new value is null. Keeping existing type.", String::from_utf8_lossy(&self.current_field_buf));
-                    } else {
-                        self.schema.insert(self.current_field_name_buf.clone(), dtype.clone());
-                    }
                     cursor += cursor_shift;
 
                     self.output_buf.extend(self.current_field_buf.clone());
@@ -182,22 +177,40 @@ impl ReconciliatingStream {
 
                     // Reset buffers and status
                     self.current_field_buf.clear();
-                    self.current_status = JsonsorStreamStatus::PassingFieldValue;
+                    self.current_status = JsonsorStreamStatus::PassingFieldValue {dtype: dtype.clone()};
+
+                    if self.schema.contains_key(&self.current_field_name_buf) && dtype == JsonsorFieldType::Null {
+                        println!("Field '{}' is already in schema, and new value is null. Keeping existing type.", String::from_utf8_lossy(&self.current_field_buf));
+                    } else {
+                        self.schema.insert(self.current_field_name_buf.clone(), dtype.clone());
+                    }
                 }
-                JsonsorStreamStatus::PassingFieldValue => {
+                JsonsorStreamStatus::PassingFieldValue{ dtype } => {
                     self.output_buf.push(*byte);
-                    // TODO: For the string the end character is a quote
-                    match *byte {
-                        b',' => {
-                            self.current_field_name_buf.clear();
-                            self.current_status = JsonsorStreamStatus::SeekingFieldName;
-                        }
-                        b'}' => {
-                            self.current_field_name_buf.clear();
-                            self.current_status = JsonsorStreamStatus::ReachedObjectEnd;
-                            continue; // reprocess this byte in the next state
+
+                    match dtype {
+                        JsonsorFieldType::String => {
+                            if *byte == b'"' {
+                                // reiterate PassingFieldValue with another type to handle
+                                // correctly comma or closing brace after string value
+                                self.current_status = JsonsorStreamStatus::PassingFieldValue{dtype: JsonsorFieldType::Null};
+                            }
                         }
                         _ => {
+                            // TODO: For non-string types, we assume the value ends with a comma or closing brace
+                            match *byte {
+                                b',' => {
+                                    self.current_field_name_buf.clear();
+                                    self.current_status = JsonsorStreamStatus::SeekingFieldName;
+                                }
+                                b'}' => {
+                                    self.current_field_name_buf.clear();
+                                    self.current_status = JsonsorStreamStatus::ReachedObjectEnd;
+                                    continue; // reprocess this byte in the next state
+                                }
+                                _ => {
+                                }
+                            }
                         }
                     }
                 }
