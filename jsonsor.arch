@@ -1,41 +1,44 @@
 solution "jsonsor" {
-  "Native dynamic library for efficient JSON schema reconcilation and following data harmonization"
+  "
+  JSON data harmonization library.
 
-  requirement "RAM Utilization" <= "100 MiB"
-  requirement "Bindings" = ["Python"]
+  Notes:
+  - Works only on valid JSON objects
+  - Can remove meaningless space characters
+  "
 
-  requirement "Input data format" = ["NDJSON"]
-  requirement "Input compression" = ["gzip"]
-  requirement "Input format" = ["byte-array", "file"]
+  # TODO: Actualize system requirements
+  requirement "RAM Utilization" = "2 times of chunk size maximum" {
+    "Never parses whole JSON into memory. Keeps only inffered schema in memory, the rest is passed as stream."
+  }
+
+  requirement "Supported input data format" = ["NDJSON"]
+  requirement "Supported input compression" = ["gzip"] # not supported yes
+  requirement "Supported input data format" = ["byte-array"]
   requirement "Input data volume" = ANY
 
-  requirement "Output data format" = ["NDJSON", "Parquet", "Arrow"]
-  requirement "Output format" = "file"
+  requirement "Output data format" = ["NDJSON"]
+  requirement "Output format" = ["byte-array"]
 
   function "Schema Inference" {
     "
-    Infers JSON schemas from data. Produces a schema per compatible data batch. 
-    Data is segregated by schemas and retained together with the inferred schema.
+    Infers JSON schemas from data on fly.
+
+    Differentiates primitive types: null, boolean, number, string.
+    Differentiates complex types: array, object.
     "
   }
 
   function "Schema reconcilation" {
     "
-    Reconciles inferred and target schemas:
-    - Merges compatible fields
-    - Adds missing fields with null values
-    - Casts convertible types
-    - Lands incompatible type values to separate fields
-    - Separates heterogeneous arrays into multiple homogeneous arrays
-    - Removed fields never removed from the target schema
-    "
-  }
+    Schema reconciliation is performed on fly by adjusting the schema of new data.
+    Schema adjustments are always backward compatible.
 
-  function "Data Harmonization" {
-    "
-    Harmonizes data to the target reconciled schema. 
-    Produces a single output file for a single input file with all data.
-    No data loss is guaranteed.
+    - Once faced field never changes
+    - All columns are considered nullable
+    - Incompatible type values are landed to separate fields
+    - Heterogeneous arrays can be harmonized via WrapInObject strategy (all array items are wrapped into objects with types preserved)
+    - Null fields can be excluded from the schema inference
     "
   }
 }
