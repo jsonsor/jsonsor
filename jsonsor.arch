@@ -8,19 +8,17 @@ solution "jsonsor" {
   "
 
   # TODO: Actualize system requirements
-  requirement "RAM Utilization" <= "100 MiB" {
+  requirement "RAM Utilization" = "2 times of chunk size maximum" {
     "Never parses whole JSON into memory. Keeps only inffered schema in memory, the rest is passed as stream."
   }
 
-  requirement "Bindings" = ["Python"]
-
   requirement "Supported input data format" = ["NDJSON"]
-  requirement "Supported input compression" = ["gzip"]
-  requirement "Supported input data format" = ["byte-array", "file"]
+  requirement "Supported input compression" = ["gzip"] # not supported yes
+  requirement "Supported input data format" = ["byte-array"]
   requirement "Input data volume" = ANY
 
   requirement "Output data format" = ["NDJSON"]
-  requirement "Output format" = ["byte-array", "file"]
+  requirement "Output format" = ["byte-array"]
 
   function "Schema Inference" {
     "
@@ -33,15 +31,14 @@ solution "jsonsor" {
 
   function "Schema reconcilation" {
     "
-    Schema reconciliation is performed on fly adjusting the schema of new data.
+    Schema reconciliation is performed on fly by adjusting the schema of new data.
     Schema adjustments are always backward compatible.
 
     - Once faced field never changes
     - All columns are considered nullable
     - Incompatible type values are landed to separate fields
-    - Heterogeneous arrays are harmonized to arrays of structs preserving the type information.
+    - Heterogeneous arrays can be harmonized via WrapInObject strategy (all array items are wrapped into objects with types preserved)
     - Null fields can be excluded from the schema inference
-    - Promotable data types are considered compatible
     "
   }
 }
