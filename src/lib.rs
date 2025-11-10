@@ -49,7 +49,7 @@ pub fn replace_chars_processor(unwanted_chars: &str, replacement: &str) -> Arc<d
 #[derive(Clone)]
 pub enum HeterogeneousArrayStrategy {
     WrapInObject,
-    KeepAsIs,
+    KeepAsIs, // Must collect information about the types inside of the array
 }
 
 #[derive(Clone)]
