@@ -130,6 +130,34 @@ fn test_field_name_processor_lowercase() {
 }
 
 #[test]
+fn test_field_name_processor_lowercase_wrap_array_in_object() {
+    let input = b"{\"Id\": 101, \"nAMe\": \"Gadget\", \"availabLE\": false, \"TAGS\": [\"tech\", \"gadget\"], \"extra_field\": 42, \"nested_object\": {\"subField\": \"value\"}}";
+
+    let init_schema = std::collections::HashMap::new();
+
+    let mut reconciliating_stream = jsonsor::JsonsorStream::new(
+        init_schema,
+        jsonsor::JsonsorConfig {
+            field_name_processors: vec![
+                Arc::new(jsonsor::lowercase_field_name),
+            ],
+            heterogeneous_array_strategy: jsonsor::HeterogeneousArrayStrategy::WrapInObject,
+        },
+    );
+
+    let (is_complete_obj, offset) = reconciliating_stream.reconcile_object(input);
+    assert_eq!(offset, input.len());
+    assert!(is_complete_obj);
+
+    let output = reconciliating_stream.output_buf;
+    println!("Output: {:?}", String::from_utf8_lossy(&output));
+
+    let expected_output =
+        "{\"id\":101, \"name\":\"Gadget\", \"available\":false, \"tags\":[{\"value\":\"tech\"},{\"value\":\"gadget\"}], \"extra_field\":42, \"nested_object\":{\"subfield\":\"value\"}}";
+    assert_eq!(String::from_utf8_lossy(&output), expected_output);
+}
+
+#[test]
 fn test_field_name_processor_unwanted_chars() {
     let input = b"{\"user.id\": 202, \"full-name\": \"Widget Pro\", \"is_active?\": true, \"preferences!\": {\"theme color\": \"dark\"}}";
 
@@ -212,6 +240,35 @@ fn test_reconcile_nested_arr_case1() {
 }
 
 #[test]
+fn test_reconcile_nested_arr_case1_arr_wrap_in_object() {
+    let input = b"{\"items\": [1, 2, 3], \"details\": [{\"name\": \"Item1\", \"price\": 19.99}, {\"name\": \"Item2\", \"price\": 29.99}]}";
+    let mut init_schema = std::collections::HashMap::new();
+    init_schema.insert(b"items".to_vec(), jsonsor::JsonsorFieldType::String);
+    init_schema.insert(
+        b"details".to_vec(),
+        jsonsor::JsonsorFieldType::Array {
+            item_type: Box::new(jsonsor::JsonsorFieldType::String),
+        },
+    );
+
+    let mut reconciliating_stream = jsonsor::JsonsorStream::new(
+        init_schema,
+        jsonsor::JsonsorConfig {
+            field_name_processors: vec![],
+            heterogeneous_array_strategy: jsonsor::HeterogeneousArrayStrategy::WrapInObject,
+        },
+    );
+    let (completed, offset) = reconciliating_stream.reconcile_object(input);
+    assert_eq!(offset, input.len());
+    assert!(completed);
+    let output = reconciliating_stream.output_buf;
+    println!("Output: {:?}", String::from_utf8_lossy(&output));
+    println!("Schema: {:?}", reconciliating_stream.schema);
+
+    let expected_output = "{\"items__arr__obj\":[{\"value\":1},{\"value\":2},{\"value\":3}], \"details__arr__obj\":[{\"value\":{\"name\":\"Item1\", \"price\":19.99}},{\"value\":{\"name\":\"Item2\", \"price\":29.99}}]}";
+    assert_eq!(String::from_utf8_lossy(&output), expected_output);
+}
+#[test]
 fn test_reconcile_heterogeneous_arr_case1() {
     // TODO: Failing test. Array type is overridden by each new element of the array. So
     // effectively, the last element type wins.
@@ -226,8 +283,8 @@ fn test_reconcile_heterogeneous_arr_case1() {
         },
     );
     let (completed, offset) = reconciliating_stream.reconcile_object(input);
-    // assert_eq!(offset, input.len());
-    // assert!(completed);
+    assert_eq!(offset, input.len());
+    assert!(completed);
     let output = reconciliating_stream.output_buf;
     println!("Output: {:?}", String::from_utf8_lossy(&output));
     println!("Schema: {:?}", reconciliating_stream.schema);
@@ -245,6 +302,60 @@ fn test_streaming_reconciliation1() {
         jsonsor::JsonsorConfig {
             field_name_processors: vec![],
             heterogeneous_array_strategy: jsonsor::HeterogeneousArrayStrategy::KeepAsIs,
+        },
+    );
+    reconciliating_stream.reconcile_object(b"{\"id\": 1, \"value\": \"test\"");
+    let output1 = &reconciliating_stream.output_buf;
+    print_schema(&reconciliating_stream.schema);
+    assert_eq!(
+        String::from_utf8_lossy(output1),
+        "{\"id\":1, \"value\":\"test\""
+    );
+
+    reconciliating_stream.reconcile_object(b", \"active\": true}");
+    let output2 = &reconciliating_stream.output_buf;
+    print_schema(&reconciliating_stream.schema);
+    assert_eq!(String::from_utf8_lossy(output2), ", \"active\":true}");
+
+    reconciliating_stream.reconcile_object(b"");
+    let output3 = &reconciliating_stream.output_buf;
+    print_schema(&reconciliating_stream.schema);
+    assert_eq!(String::from_utf8_lossy(output3), "");
+
+    reconciliating_stream.reconcile_object(b"{");
+    let output4 = &reconciliating_stream.output_buf;
+    print_schema(&reconciliating_stream.schema);
+    assert_eq!(String::from_utf8_lossy(output4), "{");
+
+    reconciliating_stream.reconcile_object(b"\"id\":");
+    let output5 = &reconciliating_stream.output_buf;
+    print_schema(&reconciliating_stream.schema);
+    assert_eq!(String::from_utf8_lossy(output5), ""); // No output yet, waiting for the value type
+                                                      // to decide on removing it entirely
+
+    reconciliating_stream.reconcile_object(b" \"2\", \"value\": null, \"active\": false");
+    let output6 = &reconciliating_stream.output_buf;
+    print_schema(&reconciliating_stream.schema);
+    assert_eq!(
+        String::from_utf8_lossy(output6),
+        "\"id__str\":\"2\", \"value\":null, \"active\":false"
+    );
+
+    reconciliating_stream.reconcile_object(b"}");
+    let output7 = &reconciliating_stream.output_buf;
+    print_schema(&reconciliating_stream.schema);
+    assert_eq!(String::from_utf8_lossy(output7), "}");
+}
+
+#[test]
+fn test_streaming_reconciliation1_arr_wrap_in_object() {
+    let init_schema = std::collections::HashMap::new();
+
+    let mut reconciliating_stream = jsonsor::JsonsorStream::new(
+        init_schema,
+        jsonsor::JsonsorConfig {
+            field_name_processors: vec![],
+            heterogeneous_array_strategy: jsonsor::HeterogeneousArrayStrategy::WrapInObject,
         },
     );
     reconciliating_stream.reconcile_object(b"{\"id\": 1, \"value\": \"test\"");
@@ -365,6 +476,46 @@ fn test_streaming_reconciliation3() {
 }
 
 #[test]
+fn test_streaming_reconciliation3_arr_wrap_in_object() {
+    let init_schema = std::collections::HashMap::new();
+
+    let mut reconciliating_stream = jsonsor::JsonsorStream::new(
+        init_schema,
+        jsonsor::JsonsorConfig {
+            field_name_processors: vec![],
+            heterogeneous_array_strategy: jsonsor::HeterogeneousArrayStrategy::WrapInObject,
+        },
+    );
+    reconciliating_stream.reconcile_object(b"{\"data\": [");
+    let output1 = &reconciliating_stream.output_buf;
+    print_schema(&reconciliating_stream.schema);
+    assert_eq!(String::from_utf8_lossy(&output1), "{\"data\":[");
+
+    reconciliating_stream.reconcile_object(b"{\"id\": 1, \"value\": \"A\"},");
+    let output2 = &reconciliating_stream.output_buf;
+    print_schema(&reconciliating_stream.schema);
+    assert_eq!(String::from_utf8_lossy(&output2), "{\"value\":{\"id\":1, \"value\":\"A\"}},");
+
+    reconciliating_stream.reconcile_object(b"{\"id\": 2");
+    let output3 = &reconciliating_stream.output_buf;
+    print_schema(&reconciliating_stream.schema);
+    assert_eq!(String::from_utf8_lossy(&output3), "{\"value\":{\"id\":2");
+
+    reconciliating_stream.reconcile_object(b", \"value__num\":200}, {\"id\": 3, \"value\": true}");
+    let output4 = &reconciliating_stream.output_buf;
+    print_schema(&reconciliating_stream.schema);
+    // not 
+    // assert_eq!(String::from_utf8_lossy(&output4), ", \"value__num\":200}},{\"value\":{\"id\":3, \"value__bool\":true}}");
+    // because wrapping object has no bytes in the input after the element object is closed
+    assert_eq!(String::from_utf8_lossy(&output4), ", \"value__num\":200}},{\"value\":{\"id\":3, \"value__bool\":true}");
+
+    reconciliating_stream.reconcile_object(b"]}");
+    let output5 = &reconciliating_stream.output_buf;
+    print_schema(&reconciliating_stream.schema);
+    assert_eq!(String::from_utf8_lossy(&output5), "}]}");
+}
+
+#[test]
 fn test_streaming_reconciliation4() {
     let init_schema = std::collections::HashMap::new();
 
@@ -412,7 +563,7 @@ fn test_streaming_reconciliation4() {
 }
 
 #[test]
-fn test_streaming_reconciliation5() {
+fn test_streaming_reconciliation4_array_wrap_in_object() {
     let init_schema = std::collections::HashMap::new();
 
     let mut reconciliating_stream = jsonsor::JsonsorStream::new(
@@ -447,15 +598,15 @@ fn test_streaming_reconciliation5() {
     print_schema(&reconciliating_stream.schema);
     assert_eq!(String::from_utf8_lossy(&output3), ", \"type\":\"example\"}, \"data\":{");
 
-    reconciliating_stream.reconcile_object(b"\"items\": [\"item1\",");
+    reconciliating_stream.reconcile_object(b"\"items\": [\"item1\"");
     let output4 = &reconciliating_stream.output_buf;
     print_schema(&reconciliating_stream.schema);
-    assert_eq!(String::from_utf8_lossy(&output4), "\"items\":[{\"value\":\"item1\"},");
+    assert_eq!(String::from_utf8_lossy(&output4), "\"items\":[{\"value\":\"item1\"");
 
-    reconciliating_stream.reconcile_object(b" \"item2\"]}}");
+    reconciliating_stream.reconcile_object(b", \"item2\"]}}");
     let output5 = &reconciliating_stream.output_buf;
     print_schema(&reconciliating_stream.schema);
-    assert_eq!(String::from_utf8_lossy(&output5), "{\"value\":\"item2\"}]}}");
+    assert_eq!(String::from_utf8_lossy(&output5), "},{\"value\":\"item2\"}]}}");
 }
 
 #[test]

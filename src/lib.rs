@@ -295,7 +295,7 @@ impl JsonsorStream {
             println!(
                 "{}[{}][{}] {:?} '{}'",
                 "\t".repeat(self.nested_level),
-                chunk.len(),
+                if self.is_field_value_wrapper { "wrapped" } else { "normal" },
                 cursor,
                 self.current_status,
                 *byte as char
@@ -355,7 +355,8 @@ impl JsonsorStream {
                         self.current_status = JsonsorStreamStatus::InferringFieldValueType;
 
                         if !self.value_prefix_buf.is_empty() {
-                            chunk.inject_chunk(cursor, "{\"value\":".as_bytes());
+                            // TODO: No need to value_prefix_buf. Replace by flag???
+                            chunk.inject_chunk(cursor, b"{\"value\":");
                         }
 
                         continue; // reprocess this byte in the next state
@@ -397,7 +398,7 @@ impl JsonsorStream {
                         }
                         b'[' => {
                             let mut nested_stream = self.nest_arr(
-                                HashMap::new(),
+                                HashMap::new(), // TODO: init array schema
                             );
                             let (is_complete_array, processed_bytes_num) =
                                 nested_stream.write_all(&chunk.starting_from(cursor));
@@ -484,12 +485,20 @@ impl JsonsorStream {
                                             cursor,
                                             self.current_status,
                                         );
-                                        cursor -= 1; // can be negative if the comma is the first
-                                                     // byte after the object
-                                                     // TODO: investigate what to do with unsigned
-                                                     // type
-                                        self.current_status = JsonsorStreamStatus::ReachedObjectEnd;
-                                        continue;
+                                        // cursor -= 1; // can be negative if the comma is the first
+                                        //              // byte after the object
+                                        //              // TODO: investigate what to do with unsigned
+                                        //              // type
+                                        // self.current_status = JsonsorStreamStatus::ReachedObjectEnd;
+                                        // continue;
+                                        self.current_status = JsonsorStreamStatus::SeekingObjectStart;
+
+                                        // root stream has no early exit on object end due to NDJSON structure
+                                        // if self.nested_level > 0 {
+                                        // Return here to make sure that the parent will reprocess
+                                        // current byte. cursor is unsigned to subtract 1 safely
+                                            return (true, cursor); // move past the closing brace
+                                        // }
                                     }
 
                                     if self.current_field_name_buf.is_empty() {
@@ -509,14 +518,20 @@ impl JsonsorStream {
                                             cursor,
                                             self.current_status,
                                         );
-                                        self.current_status = JsonsorStreamStatus::ReachedObjectEnd;
-                                        cursor -= 1; // make sure that the closing brace is
-                                                     // reprocessed in the parent stream
-                                                     // it can be negative if the closing brace is
-                                                     // the first
-                                                     // TODO: investigate what to do with unsigned
-                                                     // type
-                                        continue;
+                                        // self.current_status = JsonsorStreamStatus::ReachedObjectEnd;
+                                        // cursor -= 1; // make sure that the closing brace is
+                                        //              // reprocessed in the parent stream
+                                        //              // it can be negative if the closing brace is
+                                        //              // the first
+                                        //              // TODO: investigate what to do with unsigned
+                                        //              // type
+                                        // continue;
+                                        self.current_status = JsonsorStreamStatus::SeekingObjectStart;
+
+                                        // root stream has no early exit on object end due to NDJSON structure
+                                        // if self.nested_level > 0 {
+                                            return (true, cursor); // move past the closing brace
+                                        // }
                                     }
 
                                     self.current_field_name_buf.clear();
