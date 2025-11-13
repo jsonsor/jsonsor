@@ -192,13 +192,135 @@ impl Jsonsor {
     pub fn process_file(
         input_path: &str,
         output_path: &str,
-        init_schemaa: HashMap<Vec<u8>, JsonsorFieldType>,
+        init_schema: HashMap<Vec<u8>, JsonsorFieldType>,
         config: JsonsorConfig,
     ) -> Result<HashMap<Vec<u8>, JsonsorFieldType>, std::io::Error> {
-        let mut input_file = std::fs::File::open(input_path)?;
-        let mut output_file = std::fs::File::create(output_path)?;
+        let output_file = std::fs::File::create(output_path)?;
 
-        Self::process_stream(&mut input_file, &mut output_file, init_schemaa, config)
+        fn process_line(line: Vec<u8>) -> Vec<u8> {
+            let mut jsonsor_stream = JsonsorStream::new(HashMap::new(), JsonsorConfig {
+                field_name_processors: vec![],
+                heterogeneous_array_strategy: HeterogeneousArrayStrategy::KeepAsIs,
+                input_buffer_size: 8192,
+                output_buffer_size: 8192,
+            });
+            let (processed_line, _, _) = jsonsor_stream.reconcile_object(&line);
+            processed_line
+        }
+
+        Self::process_gzipped_lines_threadpool_flush(
+            input_path,
+            process_line,
+            2,
+            output_file,
+            10 * 1024 * 1024,
+        ).expect("Failed to process gzipped lines");
+
+        Ok(init_schema)
+    }
+
+    fn process_gzipped_lines_threadpool_flush<F, W>(
+        input_path: &str,
+        process_fn: F,
+        num_workers: usize,
+        mut output: W,
+        flush_limit: usize,
+    ) -> std::io::Result<()>
+    where
+        F: Fn(Vec<u8>) -> Vec<u8> + Send + Sync + 'static + Copy,
+        W: Write,
+    {
+        use std::collections::BTreeMap;
+        use std::fs::File;
+        use std::io::{BufRead, BufReader, Write};
+        use std::sync::mpsc;
+        use std::thread;
+        use flate2::read::GzDecoder;
+
+        let file = File::open(input_path)?;
+        let decoder = GzDecoder::new(file);
+        let mut reader = BufReader::new(decoder);
+
+        // Channel for distributing work to the dispatcher
+        let (tx, rx) = mpsc::sync_channel::<(usize, Vec<u8>)>(num_workers);
+
+        // Per-worker channels for actual work
+        let mut worker_senders = Vec::new();
+        let mut worker_handles = Vec::new();
+        let (result_tx, result_rx) = mpsc::channel::<(usize, Vec<u8>)>();
+        let process_fn = process_fn;
+
+        for _ in 0..num_workers {
+            let (worker_tx, worker_rx) = mpsc::sync_channel::<(usize, Vec<u8>)>(1);
+            let result_tx = result_tx.clone();
+            worker_senders.push(worker_tx);
+            let process_fn = process_fn;
+            worker_handles.push(thread::spawn(move || {
+                while let Ok((idx, line)) = worker_rx.recv() {
+                    let result = process_fn(line);
+                    result_tx.send((idx, result)).unwrap();
+                }
+            }));
+        }
+        drop(result_tx); // Only main thread holds result_tx now
+
+        // Dispatcher thread: receives from rx and distributes to workers round-robin
+        let dispatcher = {
+            let worker_senders = worker_senders.clone();
+            thread::spawn(move || {
+                let mut next_worker = 0;
+                while let Ok((idx, line)) = rx.recv() {
+                    worker_senders[next_worker].send((idx, line)).unwrap();
+                    next_worker = (next_worker + 1) % worker_senders.len();
+                }
+                // Close all worker channels
+                for tx in worker_senders {
+                    drop(tx);
+                }
+            })
+        };
+
+        // Main thread: read lines as bytes and send to dispatcher
+        let mut idx = 0;
+        let mut line_buf = Vec::new();
+        loop {
+            line_buf.clear();
+            let bytes_read = reader.read_until(b'\n', &mut line_buf)?;
+            if bytes_read == 0 {
+                break;
+            }
+            tx.send((idx, line_buf.clone())).unwrap();
+            idx += 1;
+        }
+        drop(tx); // Close dispatcher channel
+
+        dispatcher.join().unwrap();
+        for handle in worker_handles {
+            handle.join().unwrap();
+        }
+
+        // Collect and flush results in order
+        let mut next_idx = 0;
+        let mut buffer = BTreeMap::new();
+        let mut output_buffer = Vec::with_capacity(flush_limit);
+
+        for (idx, result) in result_rx {
+            buffer.insert(idx, result);
+            while buffer.contains_key(&next_idx) {
+                let result = buffer.remove(&next_idx).unwrap();
+                output_buffer.extend_from_slice(&result);
+                next_idx += 1;
+                if output_buffer.len() >= flush_limit {
+                    output.write_all(&output_buffer)?;
+                    output_buffer.clear();
+                }
+            }
+        }
+        if !output_buffer.is_empty() {
+            output.write_all(&output_buffer)?;
+        }
+        output.flush()?;
+        Ok(())
     }
 
     fn is_gzipped<R: Read>(reader: &mut BufReader<R>) -> bool {
