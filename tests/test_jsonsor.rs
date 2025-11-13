@@ -55,18 +55,11 @@ fn test_process_stream_par_case1() {
         output_buffer_size: 1024,
     };
 
-    let parallelism_config = JsonsorParallelismConfig {
-        num_workers: 2,
-        worker_capacity: 1,
-        lines_in_chunk: 1,
-        flush_limit: 10,
-    };
-
     let _ = Jsonsor::process_stream_par(
         input, 
         output, 
         init_schema, 
         config,
-        parallelism_config,
+        JsonsorParallelismConfig::default(),
     ).expect("Parallel stream processing failed");
 }

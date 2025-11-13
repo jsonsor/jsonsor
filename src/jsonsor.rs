@@ -16,9 +16,9 @@ pub struct JsonsorParallelismConfig {
     pub lines_in_chunk: usize,
     pub flush_limit: usize,
 }
-impl JsonsorParallelismConfig {
-    pub fn default() -> Self {
-        Self {
+impl Default for JsonsorParallelismConfig {
+    fn default() -> Self {
+        JsonsorParallelismConfig {
             num_workers: 4,
             worker_capacity: 8,
             lines_in_chunk: 1000,
