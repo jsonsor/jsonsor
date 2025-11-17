@@ -4,6 +4,20 @@
 
 Status: Pre-Alpha (proof of concept)
 
+Reconciles the following challenges when working with JSON data:
+
+- Data type conflicts (e.g., string field became integer)
+- null values (unsupported by some systems or mistakenly inferred as string type)
+- Heterogeneous arrays (unsupported by most analytical systems)
+- Different cases in field names (e.g., "userID" vs "userId")
+- Unsupported characters in field names (e.g., dots, dollar signs)
+
+The library works on all nested structures of arbitrary complexity.
+
+All problems solved in a streaming fashion, with minimal memory footprint and
+minimal latency. Ready to handle huge volumes of JSON data or very intensive
+stream of JSON events.
+
 ## Architecture
 
 See [jsonsor.arch](./jsonsor.arch)
