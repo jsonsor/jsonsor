@@ -41,9 +41,14 @@ pub enum HeterogeneousArrayStrategy {
     KeepAsIs, // Must collect information about the types inside of the array
 }
 
+pub trait FieldNameProcessor: Send + Sync {
+    fn process_unicode(&self, field_name: &String) -> String;
+    fn process_ascii(&self, field_name: &Vec<u8>) -> Vec<u8>;
+}
+
 #[derive(Clone)]
 pub struct JsonsorConfig {
-    pub field_name_processors: Vec<Arc<dyn Fn(&String) -> String>>,
+    pub field_name_processors: Vec<Arc<dyn FieldNameProcessor>>,
     pub heterogeneous_array_strategy: HeterogeneousArrayStrategy,
     pub exclude_null_fields: bool,
     pub input_buffer_size: usize,
@@ -214,12 +219,20 @@ impl JsonsorStream {
                     if *byte == b'"' {
                         self.current_status = JsonsorStreamStatus::SeekingColon;
                         if !self.current_field_name_buf.is_empty() && !self.config.field_name_processors.is_empty() {
-                            let field_name_str = String::from_utf8(
-                                self.current_field_name_buf.clone(),
-                            ).expect("Invalid UTF-8 in field name");
+                            if self.current_field_name_buf.is_ascii() {
+                                for processor in &self.config.field_name_processors {
+                                    self.current_field_name_buf = processor.process_ascii(&self.current_field_name_buf);
+                                }
+                            } else {
+                                let mut field_name_str = String::from_utf8(
+                                    self.current_field_name_buf.clone(),
+                                ).expect("Invalid UTF-8 in field name");
 
-                            for processor in &self.config.field_name_processors {
-                                self.current_field_name_buf = processor(&field_name_str).into_bytes();
+                                for processor in &self.config.field_name_processors {
+                                    field_name_str = processor.process_unicode(&field_name_str);
+                                }
+
+                                self.current_field_name_buf = field_name_str.into_bytes();
                             }
                         }
                         // TODO: Case-sensitivity problem

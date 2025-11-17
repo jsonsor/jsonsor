@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use jsonsor::{field_func::{lowercase_field_name, replace_chars_processor}, stream::{HeterogeneousArrayStrategy, JsonsorConfig, JsonsorFieldType, JsonsorStream}};
+use jsonsor::{field_func::{LowercaseFieldNameProcessor, ReplaceCharsFieldNameProcessor}, stream::{HeterogeneousArrayStrategy, JsonsorConfig, JsonsorFieldType, JsonsorStream}};
 
 
 // TODO: Switch to Jsonsor API
@@ -123,7 +123,7 @@ fn test_field_name_processor_lowercase() {
         init_schema,
         JsonsorConfig {
             field_name_processors: vec![
-                Arc::new(lowercase_field_name),
+                Arc::new(LowercaseFieldNameProcessor{}),
             ],
             heterogeneous_array_strategy: HeterogeneousArrayStrategy::KeepAsIs,
             input_buffer_size: 8192,
@@ -153,7 +153,7 @@ fn test_field_name_processor_lowercase_wrap_array_in_object() {
         init_schema,
         JsonsorConfig {
             field_name_processors: vec![
-                Arc::new(lowercase_field_name),
+                Arc::new(LowercaseFieldNameProcessor{}),
             ],
             heterogeneous_array_strategy: HeterogeneousArrayStrategy::WrapInObject,
             input_buffer_size: 8192,
@@ -183,7 +183,7 @@ fn test_field_name_processor_unwanted_chars() {
         init_schema,
         JsonsorConfig {
             field_name_processors: vec![
-                replace_chars_processor(" -!?.", "_"),
+                Arc::new(ReplaceCharsFieldNameProcessor::new(" -!?.", "_"))
             ],
             heterogeneous_array_strategy: HeterogeneousArrayStrategy::KeepAsIs,
             input_buffer_size: 8192,
