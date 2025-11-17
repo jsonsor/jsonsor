@@ -18,6 +18,10 @@ All problems solved in a streaming fashion, with minimal memory footprint and
 minimal latency. Ready to handle huge volumes of JSON data or very intensive
 stream of JSON events.
 
+Speed references: gzipped 1.5 GB of raw NDJSON data reconciled in 8 seconds on
+a single CPU (M1 Pro). Multithreaded version processes the volume in 1 second
+on 8 cores (M1 Pro).
+
 ## Architecture
 
 See [jsonsor.arch](./jsonsor.arch)
