@@ -24,7 +24,7 @@ fn test_reconcile_case1() {
             exclude_null_fields: false,
         },
     );
-    let (output, is_complete_obj, offset) = reconciliating_stream.reconcile_object(input);
+    let (output, is_complete_obj, offset) = reconciliating_stream.write_raw(input);
     assert_eq!(offset, input.len());
     assert!(is_complete_obj);
     println!("Output: {:?}", String::from_utf8_lossy(&output));
@@ -51,7 +51,7 @@ fn test_reconcile_case2() {
             exclude_null_fields: false,
         },
     );
-    let (output, is_complete_obj, offset) = reconciliating_stream.reconcile_object(input);
+    let (output, is_complete_obj, offset) = reconciliating_stream.write_raw(input);
     assert_eq!(offset, input.len());
     assert!(is_complete_obj);
     println!("Output: {:?}", String::from_utf8_lossy(&output));
@@ -78,7 +78,7 @@ fn test_reconcile_case3() {
             exclude_null_fields: false,
         },
     );
-    let (output, is_complete_obj, offset) = reconciliating_stream.reconcile_object(input);
+    let (output, is_complete_obj, offset) = reconciliating_stream.write_raw(input);
     assert_eq!(offset, input.len());
     assert!(is_complete_obj);
     println!("Output: {:?}", String::from_utf8_lossy(&output));
@@ -104,7 +104,7 @@ fn test_reconcile_unicode() {
             exclude_null_fields: false,
         },
     );
-    let (output, is_complete_obj, offset) = reconciliating_stream.reconcile_object(input);
+    let (output, is_complete_obj, offset) = reconciliating_stream.write_raw(input);
     assert_eq!(offset, input.len());
     assert!(is_complete_obj);
     println!("Output: {:?}", String::from_utf8_lossy(&output));
@@ -132,7 +132,7 @@ fn test_field_name_processor_lowercase() {
         },
     );
 
-    let (output, is_complete_obj, offset) = reconciliating_stream.reconcile_object(input);
+    let (output, is_complete_obj, offset) = reconciliating_stream.write_raw(input);
     assert_eq!(offset, input.len());
     assert!(is_complete_obj);
 
@@ -162,7 +162,7 @@ fn test_field_name_processor_lowercase_wrap_array_in_object() {
         },
     );
 
-    let (output, is_complete_obj, offset) = reconciliating_stream.reconcile_object(input);
+    let (output, is_complete_obj, offset) = reconciliating_stream.write_raw(input);
     assert_eq!(offset, input.len());
     assert!(is_complete_obj);
 
@@ -192,7 +192,7 @@ fn test_field_name_processor_unwanted_chars() {
         },
     );
 
-    let (output, is_complete_obj, offset) = reconciliating_stream.reconcile_object(input);
+    let (output, is_complete_obj, offset) = reconciliating_stream.write_raw(input);
     assert_eq!(offset, input.len());
     assert!(is_complete_obj);
 
@@ -220,7 +220,7 @@ fn test_reconcile_nested_obj_case1() {
             exclude_null_fields: false,
         },
     );
-    let (output, completed, offset) = reconciliating_stream.reconcile_object(input);
+    let (output, completed, offset) = reconciliating_stream.write_raw(input);
     assert_eq!(offset, input.len());
     assert!(completed);
     println!("Output: {:?}", String::from_utf8_lossy(&output));
@@ -251,7 +251,7 @@ fn test_reconcile_nested_arr_case1() {
             exclude_null_fields: false,
         },
     );
-    let (output, completed, offset) = reconciliating_stream.reconcile_object(input);
+    let (output, completed, offset) = reconciliating_stream.write_raw(input);
     assert_eq!(offset, input.len());
     assert!(completed);
     println!("Output: {:?}", String::from_utf8_lossy(&output));
@@ -285,7 +285,7 @@ fn test_reconcile_nested_arr_case1_arr_wrap_in_object() {
             exclude_null_fields: false,
         },
     );
-    let (output, completed, offset) = reconciliating_stream.reconcile_object(input);
+    let (output, completed, offset) = reconciliating_stream.write_raw(input);
     assert_eq!(offset, input.len());
     assert!(completed);
     println!("Output: {:?}", String::from_utf8_lossy(&output));
@@ -311,7 +311,7 @@ fn test_reconcile_heterogeneous_arr_case1() {
             exclude_null_fields: false,
         },
     );
-    let (output, completed, offset) = reconciliating_stream.reconcile_object(input);
+    let (output, completed, offset) = reconciliating_stream.write_raw(input);
     assert_eq!(offset, input.len());
     assert!(completed);
     println!("Output: {:?}", String::from_utf8_lossy(&output));
@@ -335,38 +335,38 @@ fn test_streaming_reconciliation1() {
             exclude_null_fields: false,
         },
     );
-    let (output1, _, _) = reconciliating_stream.reconcile_object(b"{\"id\": 1, \"value\": \"test\"");
+    let (output1, _, _) = reconciliating_stream.write_raw(b"{\"id\": 1, \"value\": \"test\"");
     print_schema(&reconciliating_stream.schema);
     assert_eq!(
         String::from_utf8_lossy(&output1),
         "{\"id\":1, \"value\":\"test\""
     );
 
-    let (output2, _, _) = reconciliating_stream.reconcile_object(b", \"active\": true}");
+    let (output2, _, _) = reconciliating_stream.write_raw(b", \"active\": true}");
     print_schema(&reconciliating_stream.schema);
     assert_eq!(String::from_utf8_lossy(&output2), ", \"active\":true}");
 
-    let (output3, _, _) = reconciliating_stream.reconcile_object(b"");
+    let (output3, _, _) = reconciliating_stream.write_raw(b"");
     print_schema(&reconciliating_stream.schema);
     assert_eq!(String::from_utf8_lossy(&output3), "");
 
-    let (output4, _, _) = reconciliating_stream.reconcile_object(b"{");
+    let (output4, _, _) = reconciliating_stream.write_raw(b"{");
     print_schema(&reconciliating_stream.schema);
     assert_eq!(String::from_utf8_lossy(&output4), "{");
 
-    let (output5, _, _) = reconciliating_stream.reconcile_object(b"\"id\":");
+    let (output5, _, _) = reconciliating_stream.write_raw(b"\"id\":");
     print_schema(&reconciliating_stream.schema);
     assert_eq!(String::from_utf8_lossy(&output5), ""); // No output yet, waiting for the value type
                                                       // to decide on removing it entirely
 
-    let (output6, _, _) = reconciliating_stream.reconcile_object(b" \"2\", \"value\": null, \"active\": false");
+    let (output6, _, _) = reconciliating_stream.write_raw(b" \"2\", \"value\": null, \"active\": false");
     print_schema(&reconciliating_stream.schema);
     assert_eq!(
         String::from_utf8_lossy(&output6),
         "\"id__str\":\"2\", \"value\":null, \"active\":false"
     );
 
-    let (output7, _, _) = reconciliating_stream.reconcile_object(b"}");
+    let (output7, _, _) = reconciliating_stream.write_raw(b"}");
     print_schema(&reconciliating_stream.schema);
     assert_eq!(String::from_utf8_lossy(&output7), "}");
 }
@@ -385,38 +385,38 @@ fn test_streaming_reconciliation1_arr_wrap_in_object() {
             exclude_null_fields: false,
         },
     );
-    let (output1, _, _) = reconciliating_stream.reconcile_object(b"{\"id\": 1, \"value\": \"test\"");
+    let (output1, _, _) = reconciliating_stream.write_raw(b"{\"id\": 1, \"value\": \"test\"");
     print_schema(&reconciliating_stream.schema);
     assert_eq!(
         String::from_utf8_lossy(&output1),
         "{\"id\":1, \"value\":\"test\""
     );
 
-    let (output2, _, _) = reconciliating_stream.reconcile_object(b", \"active\": true}");
+    let (output2, _, _) = reconciliating_stream.write_raw(b", \"active\": true}");
     print_schema(&reconciliating_stream.schema);
     assert_eq!(String::from_utf8_lossy(&output2), ", \"active\":true}");
 
-    let (output3, _, _) = reconciliating_stream.reconcile_object(b"");
+    let (output3, _, _) = reconciliating_stream.write_raw(b"");
     print_schema(&reconciliating_stream.schema);
     assert_eq!(String::from_utf8_lossy(&output3), "");
 
-    let (output4, _, _) = reconciliating_stream.reconcile_object(b"{");
+    let (output4, _, _) = reconciliating_stream.write_raw(b"{");
     print_schema(&reconciliating_stream.schema);
     assert_eq!(String::from_utf8_lossy(&output4), "{");
 
-    let (output5, _, _) = reconciliating_stream.reconcile_object(b"\"id\":");
+    let (output5, _, _) = reconciliating_stream.write_raw(b"\"id\":");
     print_schema(&reconciliating_stream.schema);
     assert_eq!(String::from_utf8_lossy(&output5), ""); // No output yet, waiting for the value type
                                                       // to decide on removing it entirely
 
-    let (output6, _, _) = reconciliating_stream.reconcile_object(b" \"2\", \"value\": null, \"active\": false");
+    let (output6, _, _) = reconciliating_stream.write_raw(b" \"2\", \"value\": null, \"active\": false");
     print_schema(&reconciliating_stream.schema);
     assert_eq!(
         String::from_utf8_lossy(&output6),
         "\"id__str\":\"2\", \"value\":null, \"active\":false"
     );
 
-    let (output7, _, _) = reconciliating_stream.reconcile_object(b"}");
+    let (output7, _, _) = reconciliating_stream.write_raw(b"}");
     print_schema(&reconciliating_stream.schema);
     assert_eq!(String::from_utf8_lossy(&output7), "}");
 }
@@ -435,23 +435,23 @@ fn test_streaming_reconciliation2() {
             exclude_null_fields: false,
         },
     );
-    let (output1, _, _) = reconciliating_stream.reconcile_object(b"{\"x\": {");
+    let (output1, _, _) = reconciliating_stream.write_raw(b"{\"x\": {");
     print_schema(&reconciliating_stream.schema);
     assert_eq!(String::from_utf8_lossy(&output1), "{\"x\":{");
 
-    let (output2, _, _) = reconciliating_stream.reconcile_object(b"\"a\": true, \"b\": 42");
+    let (output2, _, _) = reconciliating_stream.write_raw(b"\"a\": true, \"b\": 42");
     print_schema(&reconciliating_stream.schema);
     assert_eq!(String::from_utf8_lossy(&output2), "\"a\":true, \"b\":42");
 
-    let (output3, _, _) = reconciliating_stream.reconcile_object(b"");
+    let (output3, _, _) = reconciliating_stream.write_raw(b"");
     print_schema(&reconciliating_stream.schema);
     assert_eq!(String::from_utf8_lossy(&output3), "");
 
-    let (output4, _, _) = reconciliating_stream.reconcile_object(b", \"c3\": \"hello\"},");
+    let (output4, _, _) = reconciliating_stream.write_raw(b", \"c3\": \"hello\"},");
     print_schema(&reconciliating_stream.schema);
     assert_eq!(String::from_utf8_lossy(&output4), ", \"c3\":\"hello\"},");
 
-    let (output5, _, _) = reconciliating_stream.reconcile_object(b"\"y\": 3.14}");
+    let (output5, _, _) = reconciliating_stream.write_raw(b"\"y\": 3.14}");
     print_schema(&reconciliating_stream.schema);
     assert_eq!(String::from_utf8_lossy(&output5), "\"y\":3.14}");
 }
@@ -470,23 +470,23 @@ fn test_streaming_reconciliation3() {
             exclude_null_fields: false,
         },
     );
-    let (output1, _, _) = reconciliating_stream.reconcile_object(b"{\"data\": [");
+    let (output1, _, _) = reconciliating_stream.write_raw(b"{\"data\": [");
     print_schema(&reconciliating_stream.schema);
     assert_eq!(String::from_utf8_lossy(&output1), "{\"data\":[");
 
-    let (output2, _, _) = reconciliating_stream.reconcile_object(b"{\"id\": 1, \"value\": \"A\"},");
+    let (output2, _, _) = reconciliating_stream.write_raw(b"{\"id\": 1, \"value\": \"A\"},");
     print_schema(&reconciliating_stream.schema);
     assert_eq!(String::from_utf8_lossy(&output2), "{\"id\":1, \"value\":\"A\"},");
 
-    let (output3, _, _) = reconciliating_stream.reconcile_object(b"{\"id\": 2");
+    let (output3, _, _) = reconciliating_stream.write_raw(b"{\"id\": 2");
     print_schema(&reconciliating_stream.schema);
     assert_eq!(String::from_utf8_lossy(&output3), "{\"id\":2");
 
-    let (output4, _, _) = reconciliating_stream.reconcile_object(b", \"value__num\":200}, {\"id\": 3, \"value\": true}");
+    let (output4, _, _) = reconciliating_stream.write_raw(b", \"value__num\":200}, {\"id\": 3, \"value\": true}");
     print_schema(&reconciliating_stream.schema);
     assert_eq!(String::from_utf8_lossy(&output4), ", \"value__num\":200},{\"id\":3, \"value__bool\":true}");
 
-    let (output5, _, _) = reconciliating_stream.reconcile_object(b"]}");
+    let (output5, _, _) = reconciliating_stream.write_raw(b"]}");
     print_schema(&reconciliating_stream.schema);
     assert_eq!(String::from_utf8_lossy(&output5), "]}");
 }
@@ -505,26 +505,26 @@ fn test_streaming_reconciliation3_arr_wrap_in_object() {
             exclude_null_fields: false,
         },
     );
-    let (output1, _, _) = reconciliating_stream.reconcile_object(b"{\"data\": [");
+    let (output1, _, _) = reconciliating_stream.write_raw(b"{\"data\": [");
     print_schema(&reconciliating_stream.schema);
     assert_eq!(String::from_utf8_lossy(&output1), "{\"data\":[");
 
-    let (output2, _, _) = reconciliating_stream.reconcile_object(b"{\"id\": 1, \"value\": \"A\"},");
+    let (output2, _, _) = reconciliating_stream.write_raw(b"{\"id\": 1, \"value\": \"A\"},");
     print_schema(&reconciliating_stream.schema);
     assert_eq!(String::from_utf8_lossy(&output2), "{\"value\":{\"id\":1, \"value\":\"A\"}},");
 
-    let (output3, _, _) = reconciliating_stream.reconcile_object(b"{\"id\": 2");
+    let (output3, _, _) = reconciliating_stream.write_raw(b"{\"id\": 2");
     print_schema(&reconciliating_stream.schema);
     assert_eq!(String::from_utf8_lossy(&output3), "{\"value\":{\"id\":2");
 
-    let (output4, _, _) = reconciliating_stream.reconcile_object(b", \"value__num\":200}, {\"id\": 3, \"value\": true}");
+    let (output4, _, _) = reconciliating_stream.write_raw(b", \"value__num\":200}, {\"id\": 3, \"value\": true}");
     print_schema(&reconciliating_stream.schema);
     // not 
     // assert_eq!(String::from_utf8_lossy(&output4), ", \"value__num\":200}},{\"value\":{\"id\":3, \"value__bool\":true}}");
     // because wrapping object has no bytes in the input after the element object is closed
     assert_eq!(String::from_utf8_lossy(&output4), ", \"value__num\":200}},{\"value\":{\"id\":3, \"value__bool\":true}");
 
-    let (output5, _, _) = reconciliating_stream.reconcile_object(b"]}");
+    let (output5, _, _) = reconciliating_stream.write_raw(b"]}");
     print_schema(&reconciliating_stream.schema);
     assert_eq!(String::from_utf8_lossy(&output5), "}]}");
 }
@@ -543,12 +543,12 @@ fn test_streaming_reconciliation4() {
             exclude_null_fields: false,
         },
     );
-    let (output1, _, _) = reconciliating_stream.reconcile_object(b"{\"meta\": {");
+    let (output1, _, _) = reconciliating_stream.write_raw(b"{\"meta\": {");
     print_schema(&reconciliating_stream.schema);
     assert_eq!(reconciliating_stream.schema.get(&b"meta".to_vec()), Some(&JsonsorFieldType::Object { schema: HashMap::new() }));
     assert_eq!(String::from_utf8_lossy(&output1), "{\"meta\":{");
 
-    let (output2, _, _) = reconciliating_stream.reconcile_object(b"\"version\": 1");
+    let (output2, _, _) = reconciliating_stream.write_raw(b"\"version\": 1");
 
     print_schema(&reconciliating_stream.schema);
     let mut output2_schema = HashMap::new();
@@ -557,7 +557,7 @@ fn test_streaming_reconciliation4() {
     assert_eq!(reconciliating_stream.schema.get(&b"meta".to_vec()), Some(&JsonsorFieldType::Object { schema: output2_schema }));
     assert_eq!(String::from_utf8_lossy(&output2), "\"version\":1");
 
-    let (output3, _, _) = reconciliating_stream.reconcile_object(b", \"type\": \"example\"}, \"data\":{");
+    let (output3, _, _) = reconciliating_stream.write_raw(b", \"type\": \"example\"}, \"data\":{");
     let mut output3_schema = HashMap::new();
     output3_schema.insert(b"version".to_vec(), JsonsorFieldType::Number);
     output3_schema.insert(b"type".to_vec(), JsonsorFieldType::String);
@@ -565,11 +565,11 @@ fn test_streaming_reconciliation4() {
     print_schema(&reconciliating_stream.schema);
     assert_eq!(String::from_utf8_lossy(&output3), ", \"type\":\"example\"}, \"data\":{");
 
-    let (output4, _, _) = reconciliating_stream.reconcile_object(b"\"items\": [\"item1\"");
+    let (output4, _, _) = reconciliating_stream.write_raw(b"\"items\": [\"item1\"");
     print_schema(&reconciliating_stream.schema);
     assert_eq!(String::from_utf8_lossy(&output4), "\"items\":[\"item1\"");
 
-    let (output5, _, _) = reconciliating_stream.reconcile_object(b", \"item2\"]}}");
+    let (output5, _, _) = reconciliating_stream.write_raw(b", \"item2\"]}}");
     print_schema(&reconciliating_stream.schema);
     assert_eq!(String::from_utf8_lossy(&output5), ",\"item2\"]}}");
 }
@@ -588,12 +588,12 @@ fn test_streaming_reconciliation4_array_wrap_in_object() {
             output_buffer_size: 8192,
         },
     );
-    let (output1, _, _) = reconciliating_stream.reconcile_object(b"{\"meta\": {");
+    let (output1, _, _) = reconciliating_stream.write_raw(b"{\"meta\": {");
     print_schema(&reconciliating_stream.schema);
     assert_eq!(reconciliating_stream.schema.get(&b"meta".to_vec()), Some(&JsonsorFieldType::Object { schema: HashMap::new() }));
     assert_eq!(String::from_utf8_lossy(&output1), "{\"meta\":{");
 
-    let (output2, _, _) = reconciliating_stream.reconcile_object(b"\"version\": 1");
+    let (output2, _, _) = reconciliating_stream.write_raw(b"\"version\": 1");
 
     print_schema(&reconciliating_stream.schema);
     let mut output2_schema = HashMap::new();
@@ -602,7 +602,7 @@ fn test_streaming_reconciliation4_array_wrap_in_object() {
     assert_eq!(reconciliating_stream.schema.get(&b"meta".to_vec()), Some(&JsonsorFieldType::Object { schema: output2_schema }));
     assert_eq!(String::from_utf8_lossy(&output2), "\"version\":1");
 
-    let (output3, _, _) = reconciliating_stream.reconcile_object(b", \"type\": \"example\"}, \"data\":{");
+    let (output3, _, _) = reconciliating_stream.write_raw(b", \"type\": \"example\"}, \"data\":{");
     let mut output3_schema = HashMap::new();
     output3_schema.insert(b"version".to_vec(), JsonsorFieldType::Number);
     output3_schema.insert(b"type".to_vec(), JsonsorFieldType::String);
@@ -610,11 +610,11 @@ fn test_streaming_reconciliation4_array_wrap_in_object() {
     print_schema(&reconciliating_stream.schema);
     assert_eq!(String::from_utf8_lossy(&output3), ", \"type\":\"example\"}, \"data\":{");
 
-    let (output4, _, _) = reconciliating_stream.reconcile_object(b"\"items\": [\"item1\"");
+    let (output4, _, _) = reconciliating_stream.write_raw(b"\"items\": [\"item1\"");
     print_schema(&reconciliating_stream.schema);
     assert_eq!(String::from_utf8_lossy(&output4), "\"items\":[{\"value\":\"item1\"");
 
-    let (output5, _, _) = reconciliating_stream.reconcile_object(b", \"item2\"]}}");
+    let (output5, _, _) = reconciliating_stream.write_raw(b", \"item2\"]}}");
     print_schema(&reconciliating_stream.schema);
     assert_eq!(String::from_utf8_lossy(&output5), "},{\"value\":\"item2\"}]}}");
 }
@@ -633,7 +633,7 @@ fn test_multiline_input() {
             output_buffer_size: 8192,
         },
     );
-    let (output, is_complete, processed_bytes) = reconciliating_stream.reconcile_object(input);
+    let (output, is_complete, processed_bytes) = reconciliating_stream.write_raw(input);
     assert!(is_complete);
     assert_eq!(processed_bytes, input.len());
     println!("Output: {:?}", String::from_utf8_lossy(&output));
@@ -661,7 +661,7 @@ fn test_exclusion_of_null_fields() {
         },
     );
 
-    let (output, is_complete_obj, offset) = reconciliating_stream.reconcile_object(input);
+    let (output, is_complete_obj, offset) = reconciliating_stream.write_raw(input);
     assert_eq!(offset, input.len());
     assert!(is_complete_obj);
 
@@ -700,7 +700,7 @@ fn test_exclusion_of_null_values_in_arrays() {
         },
     );
 
-    let (output, is_complete_obj, offset) = reconciliating_stream.reconcile_object(input);
+    let (output, is_complete_obj, offset) = reconciliating_stream.write_raw(input);
     assert_eq!(offset, input.len());
     assert!(is_complete_obj);
 

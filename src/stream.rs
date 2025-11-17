@@ -126,7 +126,7 @@ impl JsonsorStream {
         }
     }
 
-    pub fn reconcile_object(&mut self, chunk: &[u8]) -> (Vec<u8>, bool, usize) {
+    pub fn write_raw(&mut self, chunk: &[u8]) -> (Vec<u8>, bool, usize) {
         let mut jsonsor_chunk = JsonsorChunk::new(chunk);
         let mut output_buf: Vec<u8> = Vec::new();
 
@@ -182,7 +182,6 @@ impl JsonsorStream {
                 schema: HashMap::new(),
             }),
         };
-        let mut output_buf: Vec<u8> = Vec::new();
         let mut cursor = 0;
 
         while cursor < chunk.len() {
@@ -201,13 +200,13 @@ impl JsonsorStream {
                     if *byte == b'{' {
                         self.current_status = JsonsorStreamStatus::SeekingFieldName;
                     }
-                    output_buf.push(*byte);
+                    out.write_all(&[*byte]).expect("Failed to write to output");
                 }
                 JsonsorStreamStatus::SeekingArrayStart => {
                     if *byte == b'[' {
                         self.current_status = JsonsorStreamStatus::SeekingFieldValue;
                     }
-                    output_buf.push(*byte);
+                    out.write_all(&[*byte]).expect("Failed to write to output");
                 }
                 JsonsorStreamStatus::SeekingFieldName => {
                     if *byte == b'"' {
@@ -285,8 +284,7 @@ impl JsonsorStream {
                                 !self.value_prefix_buf.is_empty(),
                             );
 
-                            self.handle_type_conflict(&obj_type, &mut output_buf);
-                            self.flush_output_buf(&mut output_buf, out);
+                            self.handle_type_conflict(&obj_type, out);
 
                             let (is_complete_obj, processed_bytes_num) =
                                 nested_stream.write(&chunk.starting_from(cursor), out);
@@ -307,8 +305,7 @@ impl JsonsorStream {
                                 HashMap::new(), // TODO: init array schema
                             );
 
-                            self.handle_type_conflict(&arr_obj_type, &mut output_buf);
-                            self.flush_output_buf(&mut output_buf, out);
+                            self.handle_type_conflict(&arr_obj_type, out);
 
                             let (is_complete_array, processed_bytes_num) =
                                 nested_stream.write(&chunk.starting_from(cursor), out);
@@ -337,9 +334,9 @@ impl JsonsorStream {
 
                     cursor += cursor_shift;
                     if !content.is_empty() {
-                        self.handle_type_conflict(&dtype, &mut output_buf);
+                        self.handle_type_conflict(&dtype, out);
                         if !(self.config.exclude_null_fields && dtype == JsonsorFieldType::Null) {
-                            output_buf.extend(content);
+                            out.write_all(&content).expect("Failed to write to output");
                         }
                     }
 
@@ -378,7 +375,7 @@ impl JsonsorStream {
                             match *byte {
                                 b',' => {
                                     if self.is_field_value_wrapper {
-                                        output_buf.push(b'}');
+                                        out.write_all(b"}").expect("Failed to write to output");
                                         println!(
                                             "{}[{}] Wrapping completed with status {:?}",
                                             "\t".repeat(self.nested_level),
@@ -386,7 +383,6 @@ impl JsonsorStream {
                                             self.current_status,
                                         );
                                         self.current_status = JsonsorStreamStatus::SeekingObjectStart;
-                                        self.flush_output_buf(&mut output_buf, out);
 
                                         // Return here to make sure that the parent will reprocess
                                         // current byte. cursor is unsigned to subtract 1 safely
@@ -403,7 +399,7 @@ impl JsonsorStream {
                                 }
                                 b'}' | b']' => {
                                     if self.is_field_value_wrapper {
-                                        output_buf.push(b'}');
+                                        out.write_all(b"}").expect("Failed to write to output");
                                         println!(
                                             "{}[{}] Wrapping completed with status {:?}",
                                             "\t".repeat(self.nested_level),
@@ -411,7 +407,6 @@ impl JsonsorStream {
                                             self.current_status,
                                         );
                                         self.current_status = JsonsorStreamStatus::SeekingObjectStart;
-                                        self.flush_output_buf(&mut output_buf, out);
 
                                         // root stream has no early exit on object end due to NDJSON structure
                                         return (true, cursor); // move past the closing brace
@@ -419,7 +414,7 @@ impl JsonsorStream {
 
                                     self.current_field_name_buf.clear();
                                     self.current_status = JsonsorStreamStatus::ReachedObjectEnd;
-                                    output_buf.push(*byte);
+                                    out.write_all(&[*byte]).expect("Failed to write to output");
                                     cursor -= chunk.injected_bytes;
                                     continue; // reprocess this byte in the next state
                                 }
@@ -427,9 +422,8 @@ impl JsonsorStream {
                             }
                         }
                     }
-                    // self.output_buf.push(*byte);
                     if !is_field_excluded {
-                        output_buf.push(*byte);
+                        out.write_all(&[*byte]).expect("Failed to write to output");
                     }
                 }
                 JsonsorStreamStatus::ReachedObjectEnd => {
@@ -439,7 +433,6 @@ impl JsonsorStream {
 
                     // root stream has no early exit on object end due to NDJSON structure
                     if self.nested_level > 0 {
-                        self.flush_output_buf(&mut output_buf, out);
                         return (true, cursor + 1); // move past the closing brace
                     }
                 }
@@ -447,10 +440,6 @@ impl JsonsorStream {
 
             cursor += 1; // move to the next byte
             self.previous_char = *byte;
-
-            if output_buf.len() >= self.config.output_buffer_size {
-                self.flush_output_buf(&mut output_buf, out);
-            }
         }
 
         println!(
@@ -460,17 +449,8 @@ impl JsonsorStream {
             self.current_status,
         );
 
-        if !output_buf.is_empty() {
-            self.flush_output_buf(&mut output_buf, out);
-        }
-
         // Chunk is over, but object not complete yet
         return (self.current_status == JsonsorStreamStatus::SeekingObjectStart, cursor);
-    }
-
-    fn flush_output_buf<W: Write>(&self, output_buf: &mut Vec<u8>, out: &mut W) {
-        out.write_all(output_buf).expect("Failed to write to output");
-        output_buf.clear();
     }
 
     fn handle_type_conflict<W: Write>(&mut self, target_type: &JsonsorFieldType, out: &mut W) {

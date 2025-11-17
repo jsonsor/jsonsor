@@ -1,5 +1,5 @@
 use std::collections::{BTreeMap, HashMap};
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::sync::atomic::AtomicUsize;
 use std::sync::{Arc, mpsc};
 use std::thread;
@@ -36,11 +36,13 @@ impl Jsonsor {
         config: JsonsorConfig,
     ) -> Result<HashMap<Vec<u8>, JsonsorFieldType>, std::io::Error> {
         let mut buf_input = BufReader::new(input);
+        let mut buf_output = BufWriter::with_capacity(config.input_buffer_size, output);
         let mut input_reader: Box<dyn Read> = if Self::is_gzipped(&mut buf_input) {
             Box::new(flate2::read::GzDecoder::new(buf_input))
         } else {
             Box::new(buf_input)
         };
+
 
         let input_buffer_size = config.input_buffer_size.clone();
         let mut jsonsor_stream = JsonsorStream::new(init_schema, config);
@@ -53,7 +55,7 @@ impl Jsonsor {
             }
 
             let chunk = JsonsorChunk::new(&buffer[..bytes_read]);
-            jsonsor_stream.write(&chunk, output);
+            jsonsor_stream.write(&chunk, &mut buf_output);
         }
 
         Ok(jsonsor_stream.schema)
@@ -68,9 +70,10 @@ impl Jsonsor {
     ) -> Result<HashMap<Vec<u8>, JsonsorFieldType>, std::io::Error> {
 
         fn process_chunk(worker_jsonsor_stream: &mut JsonsorStream, chunk: Vec<u8>) -> Vec<u8> {
-            let mut out = Vec::new();
+            let mut out = BufWriter::with_capacity(8192, Vec::with_capacity(chunk.len() + 1024));
             let (_, _) = worker_jsonsor_stream.write(&mut JsonsorChunk::new(&chunk), &mut out);
-            out
+            let out_data = out.into_inner().expect("Failed to get inner buffer from BufWriter");
+            out_data
         }
 
         Self::process_file_in_parallel(
