@@ -14,7 +14,7 @@ pub enum JsonsorFieldType {
     Null,
     // TODO: Make it better visualizable in debug prints
     Object {
-        schema: HashMap<Vec<u8>, JsonsorFieldType>,
+        schema: Arc<HashMap<Vec<u8>, JsonsorFieldType>>,
     },
     Array {
         item_type: Box<JsonsorFieldType>,
@@ -60,7 +60,7 @@ pub struct JsonsorStream {
     nested_level: usize,
     stack: Vec<JsonsorStream>,
     // TODO :is it ok to expose struct fields like this for the lib?
-    pub schema: HashMap<Vec<u8>, JsonsorFieldType>,
+    pub schema: Arc<HashMap<Vec<u8>, JsonsorFieldType>>,
     current_field_buf: Vec<u8>,
     current_field_name_buf: Vec<u8>,
     current_status: JsonsorStreamStatus,
@@ -78,7 +78,7 @@ impl JsonsorStream {
             config: Arc::new(config),
             nested_level: 0,
             stack: Vec::new(),
-            schema,
+            schema: Arc::new(schema),
             current_field_buf: Vec::new(),
             current_field_name_buf: Vec::new(),
             current_status: JsonsorStreamStatus::SeekingObjectStart,
@@ -89,11 +89,11 @@ impl JsonsorStream {
     }
 
     pub fn nest_obj(&self,
-        schema: HashMap<Vec<u8>, JsonsorFieldType>,
+        schema: Arc<HashMap<Vec<u8>, JsonsorFieldType>>,
         is_field_value_wrapper: bool,
     ) -> JsonsorStream {
         JsonsorStream {
-            config: self.config.clone(), // TODO: rethink later
+            config: self.config.clone(),
             nested_level: self.nested_level + 1,
             stack: Vec::new(),
             schema,
@@ -107,10 +107,10 @@ impl JsonsorStream {
     }
 
     pub fn nest_arr(&self,
-        schema: HashMap<Vec<u8>, JsonsorFieldType>,
+        schema: Arc<HashMap<Vec<u8>, JsonsorFieldType>>,
     ) -> JsonsorStream {
         JsonsorStream {
-            config: self.config.clone(), // TODO: rethink later
+            config: self.config.clone(),
             nested_level: self.nested_level + 1,
             stack: Vec::new(),
             schema,
@@ -175,11 +175,11 @@ impl JsonsorStream {
 
     fn process<W: Write>(&mut self, chunk: &mut JsonsorChunk, out: &mut W) -> (bool, usize) {
         let obj_type = JsonsorFieldType::Object {
-            schema: HashMap::new(),
+            schema: Arc::new(HashMap::new()),
         };
         let arr_obj_type = JsonsorFieldType::Array {
             item_type: Box::new(JsonsorFieldType::Object {
-                schema: HashMap::new(),
+                schema: Arc::new(HashMap::new()),
             }),
         };
         let mut cursor = 0;
@@ -276,7 +276,7 @@ impl JsonsorStream {
                                 if let Some(JsonsorFieldType::Object { schema }) = expected_field_type {
                                      schema.clone()
                                 } else {
-                                    HashMap::new()
+                                    Arc::new(HashMap::new())
                                 };
 
                             let mut nested_stream = self.nest_obj(
@@ -302,7 +302,7 @@ impl JsonsorStream {
                         }
                         b'[' => {
                             let mut nested_stream = self.nest_arr(
-                                HashMap::new(), // TODO: init array schema
+                                Arc::new(HashMap::new()), // TODO: init array schema
                             );
 
                             self.handle_type_conflict(&arr_obj_type, out);
@@ -350,7 +350,7 @@ impl JsonsorStream {
                         .filter(|prev_type| dtype == JsonsorFieldType::Null || !self.types_differ(*prev_type, &dtype)).is_some() {
                         println!("Field '{}' is already in schema, and new value is null. Keeping existing type.", String::from_utf8_lossy(&self.current_field_buf));
                     } else if !(self.config.exclude_null_fields && dtype == JsonsorFieldType::Null) {
-                        self.schema
+                        Arc::make_mut(&mut self.schema)
                             .insert(self.current_field_name_buf.clone(), dtype.clone());
                     }
                 }
@@ -478,7 +478,7 @@ impl JsonsorStream {
         self.current_field_buf.clear();
     }
 
-    fn update_current_field_schema(&mut self, updated_schema: &HashMap<Vec<u8>, JsonsorFieldType>) {
+    fn update_current_field_schema(&mut self, updated_schema: &Arc<HashMap<Vec<u8>, JsonsorFieldType>>) {
         let updated_nested_type = match self.schema.get(&self.current_field_name_buf) {
             Some(JsonsorFieldType::Object { schema: _ }) => JsonsorFieldType::Object {
                 schema: updated_schema.clone(),
@@ -492,7 +492,7 @@ impl JsonsorStream {
             None => panic!("Field for the nested stream not found in the schema"),
             _ => panic!("Unsupported field type for nested object"),
         };
-        self.schema.insert(
+        Arc::make_mut(&mut self.schema).insert(
             self.current_field_name_buf.clone(),
             updated_nested_type,
         );

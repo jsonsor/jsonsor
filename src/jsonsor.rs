@@ -34,7 +34,7 @@ impl Jsonsor {
         output: &mut W,
         init_schema: HashMap<Vec<u8>, JsonsorFieldType>,
         config: JsonsorConfig,
-    ) -> Result<HashMap<Vec<u8>, JsonsorFieldType>, std::io::Error> {
+    ) -> Result<Arc<HashMap<Vec<u8>, JsonsorFieldType>>, std::io::Error> {
         let mut buf_input = BufReader::new(input);
         let mut buf_output = BufWriter::with_capacity(config.input_buffer_size, output);
         let mut input_reader: Box<dyn Read> = if Self::is_gzipped(&mut buf_input) {
@@ -42,7 +42,6 @@ impl Jsonsor {
         } else {
             Box::new(buf_input)
         };
-
 
         let input_buffer_size = config.input_buffer_size.clone();
         let mut jsonsor_stream = JsonsorStream::new(init_schema, config);

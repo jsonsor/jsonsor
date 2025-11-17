@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fs::File, io::Cursor};
+use std::{collections::HashMap, fs::File, io::Cursor, sync::Arc};
 
 use jsonsor::{jsonsor::{Jsonsor, JsonsorParallelismConfig}, stream::{JsonsorConfig, JsonsorFieldType}};
 
@@ -40,7 +40,7 @@ fn test_process_stream_case1() {
     expected_schema.insert("age".as_bytes().to_vec(), JsonsorFieldType::Number);
     expected_schema.insert("age__str".as_bytes().to_vec(), JsonsorFieldType::String);
 
-    assert_eq!(schema, expected_schema);
+    assert_eq!(schema, Arc::new(expected_schema));
 }
 
 #[test]

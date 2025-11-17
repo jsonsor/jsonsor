@@ -545,7 +545,7 @@ fn test_streaming_reconciliation4() {
     );
     let (output1, _, _) = reconciliating_stream.write_raw(b"{\"meta\": {");
     print_schema(&reconciliating_stream.schema);
-    assert_eq!(reconciliating_stream.schema.get(&b"meta".to_vec()), Some(&JsonsorFieldType::Object { schema: HashMap::new() }));
+    assert_eq!(reconciliating_stream.schema.get(&b"meta".to_vec()), Some(&JsonsorFieldType::Object { schema: Arc::new(HashMap::new()) }));
     assert_eq!(String::from_utf8_lossy(&output1), "{\"meta\":{");
 
     let (output2, _, _) = reconciliating_stream.write_raw(b"\"version\": 1");
@@ -554,14 +554,14 @@ fn test_streaming_reconciliation4() {
     let mut output2_schema = HashMap::new();
     output2_schema.insert(b"version".to_vec(), JsonsorFieldType::Number);
 
-    assert_eq!(reconciliating_stream.schema.get(&b"meta".to_vec()), Some(&JsonsorFieldType::Object { schema: output2_schema }));
+    assert_eq!(reconciliating_stream.schema.get(&b"meta".to_vec()), Some(&JsonsorFieldType::Object { schema: Arc::new(output2_schema) }));
     assert_eq!(String::from_utf8_lossy(&output2), "\"version\":1");
 
     let (output3, _, _) = reconciliating_stream.write_raw(b", \"type\": \"example\"}, \"data\":{");
     let mut output3_schema = HashMap::new();
     output3_schema.insert(b"version".to_vec(), JsonsorFieldType::Number);
     output3_schema.insert(b"type".to_vec(), JsonsorFieldType::String);
-    assert_eq!(reconciliating_stream.schema.get(&b"meta".to_vec()), Some(&JsonsorFieldType::Object { schema: output3_schema }));
+    assert_eq!(reconciliating_stream.schema.get(&b"meta".to_vec()), Some(&JsonsorFieldType::Object { schema: Arc::new(output3_schema) }));
     print_schema(&reconciliating_stream.schema);
     assert_eq!(String::from_utf8_lossy(&output3), ", \"type\":\"example\"}, \"data\":{");
 
@@ -590,7 +590,7 @@ fn test_streaming_reconciliation4_array_wrap_in_object() {
     );
     let (output1, _, _) = reconciliating_stream.write_raw(b"{\"meta\": {");
     print_schema(&reconciliating_stream.schema);
-    assert_eq!(reconciliating_stream.schema.get(&b"meta".to_vec()), Some(&JsonsorFieldType::Object { schema: HashMap::new() }));
+    assert_eq!(reconciliating_stream.schema.get(&b"meta".to_vec()), Some(&JsonsorFieldType::Object { schema: Arc::new(HashMap::new()) }));
     assert_eq!(String::from_utf8_lossy(&output1), "{\"meta\":{");
 
     let (output2, _, _) = reconciliating_stream.write_raw(b"\"version\": 1");
@@ -599,14 +599,14 @@ fn test_streaming_reconciliation4_array_wrap_in_object() {
     let mut output2_schema = HashMap::new();
     output2_schema.insert(b"version".to_vec(), JsonsorFieldType::Number);
 
-    assert_eq!(reconciliating_stream.schema.get(&b"meta".to_vec()), Some(&JsonsorFieldType::Object { schema: output2_schema }));
+    assert_eq!(reconciliating_stream.schema.get(&b"meta".to_vec()), Some(&JsonsorFieldType::Object { schema: Arc::new(output2_schema) }));
     assert_eq!(String::from_utf8_lossy(&output2), "\"version\":1");
 
     let (output3, _, _) = reconciliating_stream.write_raw(b", \"type\": \"example\"}, \"data\":{");
     let mut output3_schema = HashMap::new();
     output3_schema.insert(b"version".to_vec(), JsonsorFieldType::Number);
     output3_schema.insert(b"type".to_vec(), JsonsorFieldType::String);
-    assert_eq!(reconciliating_stream.schema.get(&b"meta".to_vec()), Some(&JsonsorFieldType::Object { schema: output3_schema }));
+    assert_eq!(reconciliating_stream.schema.get(&b"meta".to_vec()), Some(&JsonsorFieldType::Object { schema: Arc::new(output3_schema) }));
     print_schema(&reconciliating_stream.schema);
     assert_eq!(String::from_utf8_lossy(&output3), ", \"type\":\"example\"}, \"data\":{");
 
@@ -679,8 +679,8 @@ fn test_exclusion_of_null_fields() {
 
     let mut details_schema = std::collections::HashMap::new();
     details_schema.insert(b"city".to_vec(), JsonsorFieldType::String);
-    expected_schema.insert(b"details".to_vec(), JsonsorFieldType::Object { schema: details_schema });
-    assert_eq!(reconciliating_stream.schema, expected_schema);
+    expected_schema.insert(b"details".to_vec(), JsonsorFieldType::Object { schema: Arc::new(details_schema) });
+    assert_eq!(reconciliating_stream.schema, Arc::new(expected_schema));
 }
 
 #[test]
