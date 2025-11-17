@@ -45,6 +45,7 @@ pub enum HeterogeneousArrayStrategy {
 pub struct JsonsorConfig {
     pub field_name_processors: Vec<Arc<dyn Fn(&String) -> String>>,
     pub heterogeneous_array_strategy: HeterogeneousArrayStrategy,
+    pub exclude_null_fields: bool,
     pub input_buffer_size: usize,
     pub output_buffer_size: usize,
 }
@@ -324,7 +325,9 @@ impl JsonsorStream {
                     cursor += cursor_shift;
                     if !content.is_empty() {
                         self.handle_type_conflict(&dtype, &mut output_buf);
-                        output_buf.extend(content);
+                        if !(self.config.exclude_null_fields && dtype == JsonsorFieldType::Null) {
+                            output_buf.extend(content);
+                        }
                     }
 
                     // Reset buffers and status
@@ -333,14 +336,17 @@ impl JsonsorStream {
                         dtype: dtype.clone(),
                     };
 
-                    if self.schema.contains_key(&self.current_field_name_buf) && dtype == JsonsorFieldType::Null {
+                    if self.schema.get(&self.current_field_name_buf)
+                        .filter(|prev_type| dtype == JsonsorFieldType::Null || !self.types_differ(*prev_type, &dtype)).is_some() {
                         println!("Field '{}' is already in schema, and new value is null. Keeping existing type.", String::from_utf8_lossy(&self.current_field_buf));
-                    } else {
+                    } else if !(self.config.exclude_null_fields && dtype == JsonsorFieldType::Null) {
                         self.schema
                             .insert(self.current_field_name_buf.clone(), dtype.clone());
                     }
                 }
                 JsonsorStreamStatus::PassingFieldValue { dtype } => {
+                    let is_field_excluded = self.config.exclude_null_fields && *dtype == JsonsorFieldType::Null;
+
                     match dtype {
                         JsonsorFieldType::String => {
                             // Seek the closing quote, but ignore escaped quotes if there is not
@@ -349,7 +355,9 @@ impl JsonsorStream {
                                 // reiterate PassingFieldValue with another type to handle
                                 // correctly comma or closing brace after string value
                                 self.current_status = JsonsorStreamStatus::PassingFieldValue {
-                                    dtype: JsonsorFieldType::Null,
+                                    dtype: JsonsorFieldType::Number, // dummy type to process
+                                                                     // ending of the regulat
+                                                                     // value
                                 };
                             }
                         }
@@ -407,7 +415,9 @@ impl JsonsorStream {
                         }
                     }
                     // self.output_buf.push(*byte);
-                    output_buf.push(*byte);
+                    if !is_field_excluded {
+                        output_buf.push(*byte);
+                    }
                 }
                 JsonsorStreamStatus::ReachedObjectEnd => {
                     // TODO: increment by 1 to make the final cursor equal to the chunk length.
@@ -451,23 +461,25 @@ impl JsonsorStream {
     }
 
     fn handle_type_conflict<W: Write>(&mut self, target_type: &JsonsorFieldType, out: &mut W) {
-        // TODO: Get via args
-        let expected_field_type = self.schema.get(&self.current_field_name_buf);
-        if let Some(expected_type) = expected_field_type {
-            if self.types_differ(target_type, expected_type) {
-                // TODO: Exclude null if needed
-                let suffix = self.type_suffix(target_type);
-                if !self.current_field_name_buf.is_empty() {
-                    self.current_field_buf.extend_from_slice(suffix.as_bytes());
-                    self.current_field_name_buf
-                    .extend_from_slice(suffix.as_bytes());
+        if !(self.config.exclude_null_fields && *target_type == JsonsorFieldType::Null) {
+            // TODO: Get via args
+            let expected_field_type = self.schema.get(&self.current_field_name_buf);
+            if let Some(expected_type) = expected_field_type {
+                if self.types_differ(target_type, expected_type) {
+                    // TODO: Exclude null if needed
+                    let suffix = self.type_suffix(target_type);
+                    if !self.current_field_name_buf.is_empty() {
+                        self.current_field_buf.extend_from_slice(suffix.as_bytes());
+                        self.current_field_name_buf
+                        .extend_from_slice(suffix.as_bytes());
+                    }
                 }
             }
-        }
 
-        out.write_all(&self.current_field_buf).expect("Failed to write to output");
-        if !self.current_field_name_buf.is_empty() {
-            out.write_all(b"\":").expect("Failed to write to output");
+            out.write_all(&self.current_field_buf).expect("Failed to write to output");
+            if !self.current_field_name_buf.is_empty() {
+                out.write_all(b"\":").expect("Failed to write to output");
+            }
         }
 
         self.current_field_buf.clear();

@@ -138,6 +138,7 @@ impl Jsonsor {
                     heterogeneous_array_strategy: HeterogeneousArrayStrategy::KeepAsIs,
                     input_buffer_size: 8192,
                     output_buffer_size: 8192,
+                    exclude_null_fields: false,
                 });
 
                 while let Ok((idx, chunk)) = worker_rx.recv() {

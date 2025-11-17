@@ -21,6 +21,7 @@ fn test_reconcile_case1() {
             heterogeneous_array_strategy: HeterogeneousArrayStrategy::KeepAsIs,
             input_buffer_size: 8192,
             output_buffer_size: 8192,
+            exclude_null_fields: false,
         },
     );
     let (output, is_complete_obj, offset) = reconciliating_stream.reconcile_object(input);
@@ -47,6 +48,7 @@ fn test_reconcile_case2() {
             heterogeneous_array_strategy: HeterogeneousArrayStrategy::KeepAsIs,
             input_buffer_size: 8192,
             output_buffer_size: 8192,
+            exclude_null_fields: false,
         },
     );
     let (output, is_complete_obj, offset) = reconciliating_stream.reconcile_object(input);
@@ -73,6 +75,7 @@ fn test_reconcile_case3() {
             heterogeneous_array_strategy: HeterogeneousArrayStrategy::KeepAsIs,
             input_buffer_size: 8192,
             output_buffer_size: 8192,
+            exclude_null_fields: false,
         },
     );
     let (output, is_complete_obj, offset) = reconciliating_stream.reconcile_object(input);
@@ -98,6 +101,7 @@ fn test_reconcile_unicode() {
             heterogeneous_array_strategy: HeterogeneousArrayStrategy::KeepAsIs,
             input_buffer_size: 8192,
             output_buffer_size: 8192,
+            exclude_null_fields: false,
         },
     );
     let (output, is_complete_obj, offset) = reconciliating_stream.reconcile_object(input);
@@ -124,6 +128,7 @@ fn test_field_name_processor_lowercase() {
             heterogeneous_array_strategy: HeterogeneousArrayStrategy::KeepAsIs,
             input_buffer_size: 8192,
             output_buffer_size: 8192,
+            exclude_null_fields: false,
         },
     );
 
@@ -153,6 +158,7 @@ fn test_field_name_processor_lowercase_wrap_array_in_object() {
             heterogeneous_array_strategy: HeterogeneousArrayStrategy::WrapInObject,
             input_buffer_size: 8192,
             output_buffer_size: 8192,
+            exclude_null_fields: false,
         },
     );
 
@@ -182,6 +188,7 @@ fn test_field_name_processor_unwanted_chars() {
             heterogeneous_array_strategy: HeterogeneousArrayStrategy::KeepAsIs,
             input_buffer_size: 8192,
             output_buffer_size: 8192,
+            exclude_null_fields: false,
         },
     );
 
@@ -210,6 +217,7 @@ fn test_reconcile_nested_obj_case1() {
             heterogeneous_array_strategy: HeterogeneousArrayStrategy::KeepAsIs,
             input_buffer_size: 8192,
             output_buffer_size: 8192,
+            exclude_null_fields: false,
         },
     );
     let (output, completed, offset) = reconciliating_stream.reconcile_object(input);
@@ -240,6 +248,7 @@ fn test_reconcile_nested_arr_case1() {
             heterogeneous_array_strategy: HeterogeneousArrayStrategy::KeepAsIs,
             input_buffer_size: 8192,
             output_buffer_size: 8192,
+            exclude_null_fields: false,
         },
     );
     let (output, completed, offset) = reconciliating_stream.reconcile_object(input);
@@ -273,6 +282,7 @@ fn test_reconcile_nested_arr_case1_arr_wrap_in_object() {
             heterogeneous_array_strategy: HeterogeneousArrayStrategy::WrapInObject,
             input_buffer_size: 8192,
             output_buffer_size: 8192,
+            exclude_null_fields: false,
         },
     );
     let (output, completed, offset) = reconciliating_stream.reconcile_object(input);
@@ -298,6 +308,7 @@ fn test_reconcile_heterogeneous_arr_case1() {
             heterogeneous_array_strategy: HeterogeneousArrayStrategy::WrapInObject,
             input_buffer_size: 8192,
             output_buffer_size: 8192,
+            exclude_null_fields: false,
         },
     );
     let (output, completed, offset) = reconciliating_stream.reconcile_object(input);
@@ -321,6 +332,7 @@ fn test_streaming_reconciliation1() {
             heterogeneous_array_strategy: HeterogeneousArrayStrategy::KeepAsIs,
             input_buffer_size: 8192,
             output_buffer_size: 8192,
+            exclude_null_fields: false,
         },
     );
     let (output1, _, _) = reconciliating_stream.reconcile_object(b"{\"id\": 1, \"value\": \"test\"");
@@ -370,6 +382,7 @@ fn test_streaming_reconciliation1_arr_wrap_in_object() {
             heterogeneous_array_strategy: HeterogeneousArrayStrategy::WrapInObject,
             input_buffer_size: 8192,
             output_buffer_size: 8192,
+            exclude_null_fields: false,
         },
     );
     let (output1, _, _) = reconciliating_stream.reconcile_object(b"{\"id\": 1, \"value\": \"test\"");
@@ -419,6 +432,7 @@ fn test_streaming_reconciliation2() {
             heterogeneous_array_strategy: HeterogeneousArrayStrategy::KeepAsIs,
             input_buffer_size: 8192,
             output_buffer_size: 8192,
+            exclude_null_fields: false,
         },
     );
     let (output1, _, _) = reconciliating_stream.reconcile_object(b"{\"x\": {");
@@ -453,6 +467,7 @@ fn test_streaming_reconciliation3() {
             heterogeneous_array_strategy: HeterogeneousArrayStrategy::KeepAsIs,
             input_buffer_size: 8192,
             output_buffer_size: 8192,
+            exclude_null_fields: false,
         },
     );
     let (output1, _, _) = reconciliating_stream.reconcile_object(b"{\"data\": [");
@@ -487,6 +502,7 @@ fn test_streaming_reconciliation3_arr_wrap_in_object() {
             heterogeneous_array_strategy: HeterogeneousArrayStrategy::WrapInObject,
             input_buffer_size: 8192,
             output_buffer_size: 8192,
+            exclude_null_fields: false,
         },
     );
     let (output1, _, _) = reconciliating_stream.reconcile_object(b"{\"data\": [");
@@ -524,6 +540,7 @@ fn test_streaming_reconciliation4() {
             heterogeneous_array_strategy: HeterogeneousArrayStrategy::KeepAsIs,
             input_buffer_size: 8192,
             output_buffer_size: 8192,
+            exclude_null_fields: false,
         },
     );
     let (output1, _, _) = reconciliating_stream.reconcile_object(b"{\"meta\": {");
@@ -566,6 +583,7 @@ fn test_streaming_reconciliation4_array_wrap_in_object() {
         JsonsorConfig {
             field_name_processors: vec![],
             heterogeneous_array_strategy: HeterogeneousArrayStrategy::WrapInObject,
+            exclude_null_fields: false,
             input_buffer_size: 8192,
             output_buffer_size: 8192,
         },
@@ -610,6 +628,7 @@ fn test_multiline_input() {
         JsonsorConfig {
             field_name_processors: vec![],
             heterogeneous_array_strategy: HeterogeneousArrayStrategy::KeepAsIs,
+            exclude_null_fields: false,
             input_buffer_size: 8192,
             output_buffer_size: 8192,
         },
@@ -623,6 +642,73 @@ fn test_multiline_input() {
 
     let schema = &reconciliating_stream.schema;
     println!("Schema: {:?}", schema);
+}
+
+#[test]
+fn test_exclusion_of_null_fields() {
+    let input = b"{\"id\": 1, \"size\": \"XXL\", \"name\": null, \"active\": true, \"details\": {\"age\": null, \"city\": \"Metropolis\"}}";
+
+    let init_schema = std::collections::HashMap::new();
+
+    let mut reconciliating_stream = JsonsorStream::new(
+        init_schema,
+        JsonsorConfig {
+            field_name_processors: vec![],
+            heterogeneous_array_strategy: HeterogeneousArrayStrategy::WrapInObject,
+            exclude_null_fields: true,
+            input_buffer_size: 8192,
+            output_buffer_size: 8192,
+        },
+    );
+
+    let (output, is_complete_obj, offset) = reconciliating_stream.reconcile_object(input);
+    assert_eq!(offset, input.len());
+    assert!(is_complete_obj);
+
+    // let output = reconciliating_stream.output_buf;
+    println!("Output: {:?}", String::from_utf8_lossy(&output));
+
+    let expected_output =
+        "{\"id\":1, \"size\":\"XXL\", \"active\":true, \"details\":{ \"city\":\"Metropolis\"}}";
+    assert_eq!(String::from_utf8_lossy(&output), expected_output);
+
+    let mut expected_schema = std::collections::HashMap::new();
+    expected_schema.insert(b"id".to_vec(), JsonsorFieldType::Number);
+    expected_schema.insert(b"size".to_vec(), JsonsorFieldType::String);
+    expected_schema.insert(b"active".to_vec(), JsonsorFieldType::Boolean);
+
+    let mut details_schema = std::collections::HashMap::new();
+    details_schema.insert(b"city".to_vec(), JsonsorFieldType::String);
+    expected_schema.insert(b"details".to_vec(), JsonsorFieldType::Object { schema: details_schema });
+    assert_eq!(reconciliating_stream.schema, expected_schema);
+}
+
+#[test]
+fn test_exclusion_of_null_values_in_arrays() {
+    let input = b"{\"values\": [1, null, \"two\", null, 3.0]}";
+
+    let init_schema = std::collections::HashMap::new();
+
+    let mut reconciliating_stream = JsonsorStream::new(
+        init_schema,
+        JsonsorConfig {
+            field_name_processors: vec![],
+            heterogeneous_array_strategy: HeterogeneousArrayStrategy::WrapInObject,
+            exclude_null_fields: true,
+            input_buffer_size: 8192,
+            output_buffer_size: 8192,
+        },
+    );
+
+    let (output, is_complete_obj, offset) = reconciliating_stream.reconcile_object(input);
+    assert_eq!(offset, input.len());
+    assert!(is_complete_obj);
+
+    // let output = reconciliating_stream.output_buf;
+    println!("Output: {:?}", String::from_utf8_lossy(&output));
+
+    let expected_output = "{\"values\":[{\"value\":1},{},{\"value__str\":\"two\"},{},{\"value\":3.0}]}";
+    assert_eq!(String::from_utf8_lossy(&output), expected_output);
 }
 
 fn print_schema(schema: &std::collections::HashMap<Vec<u8>, JsonsorFieldType>) {

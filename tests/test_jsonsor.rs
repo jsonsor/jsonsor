@@ -15,6 +15,7 @@ fn test_process_stream_case1() {
     let config = JsonsorConfig {
         field_name_processors: vec![],
         heterogeneous_array_strategy: jsonsor::stream::HeterogeneousArrayStrategy::KeepAsIs,
+        exclude_null_fields: false,
         input_buffer_size: 1024,
         output_buffer_size: 1024,
     };
@@ -51,6 +52,7 @@ fn test_process_stream_par_case1() {
     let config = JsonsorConfig {
         field_name_processors: vec![],
         heterogeneous_array_strategy: jsonsor::stream::HeterogeneousArrayStrategy::KeepAsIs,
+        exclude_null_fields: false,
         input_buffer_size: 1024,
         output_buffer_size: 1024,
     };
