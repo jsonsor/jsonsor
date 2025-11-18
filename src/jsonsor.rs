@@ -16,6 +16,7 @@ pub struct JsonsorParallelismConfig {
     pub lines_in_chunk: usize,
     pub flush_limit: usize,
 }
+
 impl Default for JsonsorParallelismConfig {
     fn default() -> Self {
         JsonsorParallelismConfig {

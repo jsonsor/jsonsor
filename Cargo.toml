@@ -6,9 +6,14 @@ edition = "2021"
 [lib]
 crate-type = ["lib", "cdylib"]
 
+[features]
+default = ["arrow"]
+arrow = []
+
 [dependencies]
 flate2 = "1.1.5"
 mimalloc = { version = "*", features = ["v3"] }
+arrow = { version = "57", features = ["json"] }
 
 [profile.release]
 opt-level = 3
