@@ -211,6 +211,9 @@ impl JsonsorStream {
                 JsonsorStreamStatus::SeekingFieldName => {
                     if *byte == b'"' {
                         self.current_status = JsonsorStreamStatus::ParsingFieldName;
+                    } else if *byte == b'}' { // happens if object is empty
+                        self.current_status = JsonsorStreamStatus::PassingFieldValue { dtype: JsonsorFieldType::Null };
+                        continue;
                     }
                     self.current_field_buf.push(*byte);
                 }
@@ -253,6 +256,9 @@ impl JsonsorStream {
                     // TODO: are all space chars covered?
                     if self.is_space_byte(*byte) {
                         // skip spaces
+                    } else if *byte == b']' { // happens if array is empty
+                        self.current_status = JsonsorStreamStatus::PassingFieldValue { dtype: JsonsorFieldType::Null };
+                        continue;
                     } else {
                         self.current_status = JsonsorStreamStatus::InferringFieldValueType;
 

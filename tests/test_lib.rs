@@ -90,6 +90,29 @@ fn test_reconcile_case3() {
 }
 
 #[test]
+fn test_reconcile_case4() {
+    let input = b"{\"f1\": [], \"f2\": {}, \"f3\": [[], {}], \"f4\": {\"f5\": [{}, []], \"f6\": {}}}";
+    let init_schema = std::collections::HashMap::new();
+    let mut reconciliating_stream = JsonsorStream::new(
+        init_schema,
+        JsonsorConfig {
+            field_name_processors: vec![],
+            heterogeneous_array_strategy: HeterogeneousArrayStrategy::KeepAsIs,
+            input_buffer_size: 8192,
+            output_buffer_size: 8192,
+            exclude_null_fields: false,
+        },
+    );
+    let (output, is_complete_obj, offset) = reconciliating_stream.write_raw(input);
+    assert_eq!(offset, input.len());
+    assert!(is_complete_obj);
+    println!("Output: {:?}", String::from_utf8_lossy(&output));
+
+    let expected_output = "{\"f1\":[], \"f2\":{}, \"f3\":[[],{}], \"f4\":{\"f5\":[{},[]], \"f6\":{}}}";
+    assert_eq!(String::from_utf8_lossy(&output), expected_output);
+}
+
+#[test]
 fn test_reconcile_unicode() {
     let input = b"{\"greeting \\u4e16\": \"Hello, \\u4e16\\u754c\", \"\\u306a farewell\": \"Goodbye, \\u3055\\u3089\\u306a\"}";
     let init_schema = std::collections::HashMap::new();
