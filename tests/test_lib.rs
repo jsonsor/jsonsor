@@ -113,6 +113,77 @@ fn test_reconcile_case4() {
 }
 
 #[test]
+fn test_reconcile_case5() {
+    let input = b"{\"a\": [1, 2, 3]}\n{\"a\": [\"one\", \"two\", \"three\"]}\n{\"a\": [4.0, 5.0, 6.0]}\n{\"a\": [true, false, true]}\n{\"a\": [{\"key\": \"value\"}, {\"key2\": \"value2\"}]}";
+    let init_schema = std::collections::HashMap::new();
+    let mut reconciliating_stream = JsonsorStream::new(
+        init_schema,
+        JsonsorConfig {
+            field_name_processors: vec![],
+            heterogeneous_array_strategy: HeterogeneousArrayStrategy::WrapInObject,
+            input_buffer_size: 8192,
+            output_buffer_size: 8192,
+            exclude_null_fields: false,
+        },
+    );
+    let (output, is_complete_obj, offset) = reconciliating_stream.write_raw(input);
+    assert_eq!(offset, input.len());
+    assert!(is_complete_obj);
+    println!("Output: {:?}", String::from_utf8_lossy(&output));
+
+    print_schema(&reconciliating_stream.schema);
+    let expected_output = "{\"a__arr__obj\":[{\"value\":1},{\"value\":2},{\"value\":3}]}\n{\"a__arr__obj\":[{\"value__str\":\"one\"},{\"value__str\":\"two\"},{\"value__str\":\"three\"}]}\n{\"a__arr__obj\":[{\"value\":4.0},{\"value\":5.0},{\"value\":6.0}]}\n{\"a__arr__obj\":[{\"value__bool\":true},{\"value__bool\":false},{\"value__bool\":true}]}\n{\"a__arr__obj\":[{\"value__obj\":{\"key\":\"value\"}},{\"value__obj\":{\"key2\":\"value2\"}}]}";
+    assert_eq!(String::from_utf8_lossy(&output), expected_output);
+}
+
+#[test]
+fn test_reconcile_case6() {
+    let input = b"{\"a\": 1, \"e\": null}\n{\"a\": 2}";
+    let init_schema = std::collections::HashMap::new();
+    let mut reconciliating_stream = JsonsorStream::new(
+        init_schema,
+        JsonsorConfig {
+            field_name_processors: vec![],
+            heterogeneous_array_strategy: HeterogeneousArrayStrategy::WrapInObject,
+            input_buffer_size: 8192,
+            output_buffer_size: 8192,
+            exclude_null_fields: true,
+        },
+    );
+    let (output, is_complete_obj, offset) = reconciliating_stream.write_raw(input);
+    assert_eq!(offset, input.len());
+    assert!(is_complete_obj);
+    println!("Output: {:?}", String::from_utf8_lossy(&output));
+
+    let expected_output = "{\"a\":1}\n{\"a\":2}";
+    assert_eq!(String::from_utf8_lossy(&output), expected_output);
+}
+
+#[test]
+fn test_reconcile_case7() {
+    let input = b"{\"a\": [], \"d\": {\"e\": null}}\n{\"a\": [null], \"f\": {\"g\": {\"e\": null}, \"h\": 1}}\n{\"a\": [], \"b\": [{\"c\": null}]}";
+    let init_schema = std::collections::HashMap::new();
+    let mut reconciliating_stream = JsonsorStream::new(
+        init_schema,
+        JsonsorConfig {
+            field_name_processors: vec![],
+            heterogeneous_array_strategy: HeterogeneousArrayStrategy::WrapInObject,
+            input_buffer_size: 8192,
+            output_buffer_size: 8192,
+            exclude_null_fields: true,
+        },
+    );
+    let (output, is_complete_obj, offset) = reconciliating_stream.write_raw(input);
+    assert_eq!(offset, input.len());
+    assert!(is_complete_obj);
+    println!("Output: {:?}", String::from_utf8_lossy(&output));
+    print_schema(&reconciliating_stream.schema);
+
+    let expected_output = "{\"a__arr__obj\":[], \"d\":{}}\n{\"a__arr__obj\":[{}], \"f\":{\"g\":{}, \"h\":1}}\n{\"a__arr__obj\":[], \"b__arr__obj\":[{\"value\":{}}]}";
+    assert_eq!(String::from_utf8_lossy(&output), expected_output);
+}
+
+#[test]
 fn test_reconcile_unicode() {
     let input = b"{\"greeting \\u4e16\": \"Hello, \\u4e16\\u754c\", \"\\u306a farewell\": \"Goodbye, \\u3055\\u3089\\u306a\"}";
     let init_schema = std::collections::HashMap::new();
@@ -192,7 +263,7 @@ fn test_field_name_processor_lowercase_wrap_array_in_object() {
     println!("Output: {:?}", String::from_utf8_lossy(&output));
 
     let expected_output =
-        "{\"id\":101, \"name\":\"Gadget\", \"available\":false, \"tags\":[{\"value\":\"tech\"},{\"value\":\"gadget\"}], \"extra_field\":42, \"nested_object\":{\"subfield\":\"value\"}}";
+        "{\"id\":101, \"name\":\"Gadget\", \"available\":false, \"tags__arr__obj\":[{\"value\":\"tech\"},{\"value\":\"gadget\"}], \"extra_field\":42, \"nested_object\":{\"subfield\":\"value\"}}";
     assert_eq!(String::from_utf8_lossy(&output), expected_output);
 }
 
@@ -317,6 +388,7 @@ fn test_reconcile_nested_arr_case1_arr_wrap_in_object() {
     let expected_output = "{\"items__arr__obj\":[{\"value\":1},{\"value\":2},{\"value\":3}], \"details__arr__obj\":[{\"value\":{\"name\":\"Item1\", \"price\":19.99}},{\"value\":{\"name\":\"Item2\", \"price\":29.99}}]}";
     assert_eq!(String::from_utf8_lossy(&output), expected_output);
 }
+
 #[test]
 fn test_reconcile_heterogeneous_arr_case1() {
     // TODO: Failing test. Array type is overridden by each new element of the array. So
@@ -340,7 +412,7 @@ fn test_reconcile_heterogeneous_arr_case1() {
     println!("Output: {:?}", String::from_utf8_lossy(&output));
     println!("Schema: {:?}", reconciliating_stream.schema);
 
-    let expected_output = "{\"values\":[{\"value\":1},{\"value__str\":\"two\"},{\"value\":3.0},{\"value__bool\":true},{\"value__obj\":{\"key\":\"value\"}}]}";
+    let expected_output = "{\"values__arr__obj\":[{\"value\":1},{\"value__str\":\"two\"},{\"value\":3.0},{\"value__bool\":true},{\"value__obj\":{\"key\":\"value\"}}]}";
     assert_eq!(String::from_utf8_lossy(&output), expected_output);
 }
 
@@ -472,11 +544,11 @@ fn test_streaming_reconciliation2() {
 
     let (output4, _, _) = reconciliating_stream.write_raw(b", \"c3\": \"hello\"},");
     print_schema(&reconciliating_stream.schema);
-    assert_eq!(String::from_utf8_lossy(&output4), ", \"c3\":\"hello\"},");
+    assert_eq!(String::from_utf8_lossy(&output4), ", \"c3\":\"hello\"}");
 
     let (output5, _, _) = reconciliating_stream.write_raw(b"\"y\": 3.14}");
     print_schema(&reconciliating_stream.schema);
-    assert_eq!(String::from_utf8_lossy(&output5), "\"y\":3.14}");
+    assert_eq!(String::from_utf8_lossy(&output5), ",\"y\":3.14}");
 }
 
 #[test]
@@ -499,11 +571,11 @@ fn test_streaming_reconciliation3() {
 
     let (output2, _, _) = reconciliating_stream.write_raw(b"{\"id\": 1, \"value\": \"A\"},");
     print_schema(&reconciliating_stream.schema);
-    assert_eq!(String::from_utf8_lossy(&output2), "{\"id\":1, \"value\":\"A\"},");
+    assert_eq!(String::from_utf8_lossy(&output2), "{\"id\":1, \"value\":\"A\"}");
 
     let (output3, _, _) = reconciliating_stream.write_raw(b"{\"id\": 2");
     print_schema(&reconciliating_stream.schema);
-    assert_eq!(String::from_utf8_lossy(&output3), "{\"id\":2");
+    assert_eq!(String::from_utf8_lossy(&output3), ",{\"id\":2");
 
     let (output4, _, _) = reconciliating_stream.write_raw(b", \"value__num\":200}, {\"id\": 3, \"value\": true}");
     print_schema(&reconciliating_stream.schema);
@@ -530,15 +602,15 @@ fn test_streaming_reconciliation3_arr_wrap_in_object() {
     );
     let (output1, _, _) = reconciliating_stream.write_raw(b"{\"data\": [");
     print_schema(&reconciliating_stream.schema);
-    assert_eq!(String::from_utf8_lossy(&output1), "{\"data\":[");
+    assert_eq!(String::from_utf8_lossy(&output1), "{\"data__arr__obj\":[");
 
     let (output2, _, _) = reconciliating_stream.write_raw(b"{\"id\": 1, \"value\": \"A\"},");
     print_schema(&reconciliating_stream.schema);
-    assert_eq!(String::from_utf8_lossy(&output2), "{\"value\":{\"id\":1, \"value\":\"A\"}},");
+    assert_eq!(String::from_utf8_lossy(&output2), "{\"value\":{\"id\":1, \"value\":\"A\"}}");
 
     let (output3, _, _) = reconciliating_stream.write_raw(b"{\"id\": 2");
     print_schema(&reconciliating_stream.schema);
-    assert_eq!(String::from_utf8_lossy(&output3), "{\"value\":{\"id\":2");
+    assert_eq!(String::from_utf8_lossy(&output3), ",{\"value\":{\"id\":2");
 
     let (output4, _, _) = reconciliating_stream.write_raw(b", \"value__num\":200}, {\"id\": 3, \"value\": true}");
     print_schema(&reconciliating_stream.schema);
@@ -635,7 +707,7 @@ fn test_streaming_reconciliation4_array_wrap_in_object() {
 
     let (output4, _, _) = reconciliating_stream.write_raw(b"\"items\": [\"item1\"");
     print_schema(&reconciliating_stream.schema);
-    assert_eq!(String::from_utf8_lossy(&output4), "\"items\":[{\"value\":\"item1\"");
+    assert_eq!(String::from_utf8_lossy(&output4), "\"items__arr__obj\":[{\"value\":\"item1\"");
 
     let (output5, _, _) = reconciliating_stream.write_raw(b", \"item2\"]}}");
     print_schema(&reconciliating_stream.schema);
@@ -730,13 +802,22 @@ fn test_exclusion_of_null_values_in_arrays() {
     // let output = reconciliating_stream.output_buf;
     println!("Output: {:?}", String::from_utf8_lossy(&output));
 
-    let expected_output = "{\"values\":[{\"value\":1},{},{\"value__str\":\"two\"},{},{\"value\":3.0}]}";
+    let expected_output = "{\"values__arr__obj\":[{\"value\":1},{},{\"value__str\":\"two\"},{},{\"value\":3.0}]}";
     assert_eq!(String::from_utf8_lossy(&output), expected_output);
 }
 
 fn print_schema(schema: &std::collections::HashMap<Vec<u8>, JsonsorFieldType>) {
     println!("Current Schema:");
-    for (key, value) in schema {
-        println!("  {:?}: {:?}", String::from_utf8_lossy(key), value);
+    let schema_str = schema_to_str(schema, 0);
+    println!("{}", schema_str);
+}
+
+fn schema_to_str(schema: &HashMap<Vec<u8>, JsonsorFieldType>, nested_level: usize) -> String {
+    let mut result = String::new();
+    for (field_path, field_type) in schema {
+        let field_path_str = String::from_utf8_lossy(field_path);
+        let indent = "\t".repeat(nested_level);
+        result.push_str(&format!("{}{}: {}\n", indent, field_path_str, field_type));
     }
+    result
 }

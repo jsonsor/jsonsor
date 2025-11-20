@@ -1,3 +1,4 @@
+use core::fmt;
 use std::collections::HashMap;
 use std::io::Write;
 use std::mem::discriminant;
@@ -6,13 +7,12 @@ use std::sync::{Arc};
 use crate::chunk::JsonsorChunk;
 
 
-#[derive(PartialEq, Eq, Debug, Clone)]
+#[derive(PartialEq, Eq, Clone)]
 pub enum JsonsorFieldType {
     Number,
     String,
     Boolean,
     Null,
-    // TODO: Make it better visualizable in debug prints
     Object {
         schema: Arc<HashMap<Vec<u8>, JsonsorFieldType>>,
     },
@@ -21,7 +21,40 @@ pub enum JsonsorFieldType {
     },
 }
 
-#[derive(Debug, PartialEq)]
+impl fmt::Display for JsonsorFieldType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            JsonsorFieldType::Null => write!(f, "Null"),
+            JsonsorFieldType::Boolean => write!(f, "Boolean"),
+            JsonsorFieldType::Number => write!(f, "Number"),
+            JsonsorFieldType::String => write!(f, "String"),
+            JsonsorFieldType::Array { item_type } => {
+                write!(f, "Array of {}", item_type)
+            }
+            JsonsorFieldType::Object { schema } => {
+                write!(f, "Object with fields: [")?;
+                for (key, value) in schema.iter() {
+                    write!(f, "'{}': {}, ", String::from_utf8_lossy(key), value)?;
+                }
+                write!(f, "]")
+            }
+        }
+    }
+}
+
+impl JsonsorFieldType {
+    pub fn is_primitive(&self) -> bool {
+        matches!(self, JsonsorFieldType::Number | JsonsorFieldType::String | JsonsorFieldType::Boolean | JsonsorFieldType::Null)
+    }
+}
+
+impl fmt::Debug for JsonsorFieldType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(self, f)
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
 pub enum JsonsorStreamStatus {
     SeekingObjectStart,
     SeekingArrayStart,
@@ -34,8 +67,7 @@ pub enum JsonsorStreamStatus {
     ReachedObjectEnd,
 }
 
-
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum HeterogeneousArrayStrategy {
     WrapInObject,
     KeepAsIs, // Must collect information about the types inside of the array
@@ -55,6 +87,13 @@ pub struct JsonsorConfig {
     pub output_buffer_size: usize,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum JsonsorNestedStreamSpecificsFlag {
+    None,
+    ArrayValueWrapper,
+    ArrayForWrapInObject,
+}
+
 pub struct JsonsorStream {
     config: Arc<JsonsorConfig>,
     nested_level: usize,
@@ -64,9 +103,9 @@ pub struct JsonsorStream {
     current_field_buf: Vec<u8>,
     current_field_name_buf: Vec<u8>,
     current_status: JsonsorStreamStatus,
-    value_prefix_buf: Vec<u8>,
-    is_field_value_wrapper: bool,
+    specifics_flag: JsonsorNestedStreamSpecificsFlag,
     previous_char: u8,
+    has_previous_field: bool,
 }
 
 impl JsonsorStream {
@@ -82,15 +121,15 @@ impl JsonsorStream {
             current_field_buf: Vec::new(),
             current_field_name_buf: Vec::new(),
             current_status: JsonsorStreamStatus::SeekingObjectStart,
-            value_prefix_buf: Vec::new(),
-            is_field_value_wrapper: false,
+            specifics_flag: JsonsorNestedStreamSpecificsFlag::None,
             previous_char: b'\0',
+            has_previous_field: false,
         }
     }
 
     pub fn nest_obj(&self,
         schema: Arc<HashMap<Vec<u8>, JsonsorFieldType>>,
-        is_field_value_wrapper: bool,
+        inherited_specifics_flag: JsonsorNestedStreamSpecificsFlag,
     ) -> JsonsorStream {
         JsonsorStream {
             config: self.config.clone(),
@@ -100,9 +139,9 @@ impl JsonsorStream {
             current_field_buf: Vec::new(),
             current_field_name_buf: Vec::new(),
             current_status: JsonsorStreamStatus::SeekingObjectStart,
-            value_prefix_buf: Vec::new(),
-            is_field_value_wrapper,
+            specifics_flag: inherited_specifics_flag,
             previous_char: b'\0',
+            has_previous_field: false,
         }
     }
 
@@ -117,12 +156,12 @@ impl JsonsorStream {
             current_field_buf: Vec::new(),
             current_field_name_buf: Vec::new(),
             current_status: JsonsorStreamStatus::SeekingArrayStart,
-            value_prefix_buf: match self.config.heterogeneous_array_strategy {
-                HeterogeneousArrayStrategy::WrapInObject => "{\"value\":".as_bytes().to_vec(),
-                HeterogeneousArrayStrategy::KeepAsIs => Vec::new(),
+            specifics_flag: match self.config.heterogeneous_array_strategy {
+                HeterogeneousArrayStrategy::WrapInObject => JsonsorNestedStreamSpecificsFlag::ArrayForWrapInObject,
+                HeterogeneousArrayStrategy::KeepAsIs => JsonsorNestedStreamSpecificsFlag::None,
             },
-            is_field_value_wrapper: false,
             previous_char: b'\0',
+            has_previous_field: false,
         }
     }
 
@@ -187,9 +226,8 @@ impl JsonsorStream {
         while cursor < chunk.len() {
             let byte = &chunk.get_byte_by_index(cursor).expect("Cursor out of bounds");
             println!(
-                "{}[{}][{}] {:?} '{}'",
+                "{}[{}] {:?} '{}'",
                 "\t".repeat(self.nested_level),
-                if self.is_field_value_wrapper { "wrapped" } else { "normal" },
                 cursor,
                 self.current_status,
                 *byte as char
@@ -257,12 +295,16 @@ impl JsonsorStream {
                     if self.is_space_byte(*byte) {
                         // skip spaces
                     } else if *byte == b']' { // happens if array is empty
-                        self.current_status = JsonsorStreamStatus::PassingFieldValue { dtype: JsonsorFieldType::Null };
+                        if self.config.heterogeneous_array_strategy == HeterogeneousArrayStrategy::WrapInObject {
+                            self.current_status = JsonsorStreamStatus::PassingFieldValue { dtype: JsonsorFieldType::Object { schema: Arc::new(HashMap::new()) } };
+                        } else {
+                            self.current_status = JsonsorStreamStatus::PassingFieldValue { dtype: JsonsorFieldType::Null };
+                        }
                         continue;
                     } else {
                         self.current_status = JsonsorStreamStatus::InferringFieldValueType;
 
-                        if !self.value_prefix_buf.is_empty() {
+                        if self.specifics_flag == JsonsorNestedStreamSpecificsFlag::ArrayForWrapInObject {
                             // TODO: No need to value_prefix_buf. Replace by flag???
                             chunk.inject_chunk(cursor, b"{\"value\":");
                         }
@@ -271,13 +313,24 @@ impl JsonsorStream {
                     }
                 }
                 JsonsorStreamStatus::InferringFieldValueType => {
-                    let expected_field_type = self.schema.get(&self.current_field_name_buf);
-                    let (dtype, cursor_shift, content) = match *byte {
-                        b'"' => (JsonsorFieldType::String, 0, vec![*byte]),
-                        b'n' => (JsonsorFieldType::Null, 0, vec![*byte]),
-                        b't' | b'f' => (JsonsorFieldType::Boolean, 0, vec![*byte]),
-                        b'0'..=b'9' | b'-' => (JsonsorFieldType::Number, 0, vec![*byte]),
+                    let (dtype, cursor_shift, is_type_modified_during_type_inference) = match *byte {
+                        b'"' => (JsonsorFieldType::String, 0, false),
+                        b'n' => (JsonsorFieldType::Null, 0, false),
+                        b't' | b'f' => (JsonsorFieldType::Boolean, 0, false),
+                        b'0'..=b'9' | b'-' => (JsonsorFieldType::Number, 0, false),
                         b'{' => {
+                            self.commit_field_name(&obj_type, out);
+
+                            let expected_field_type = self.schema.get(&self.current_field_name_buf);
+
+                            println!(
+                                "{}[{}] Nesting object for field '{}' of type {}",
+                                "\t".repeat(self.nested_level),
+                                cursor,
+                                String::from_utf8_lossy(&self.current_field_name_buf),
+                                expected_field_type.unwrap_or(&JsonsorFieldType::Null)
+                            );
+
                             let nested_stream_init_schema =
                                 if let Some(JsonsorFieldType::Object { schema }) = expected_field_type {
                                      schema.clone()
@@ -287,10 +340,13 @@ impl JsonsorStream {
 
                             let mut nested_stream = self.nest_obj(
                                 nested_stream_init_schema,
-                                !self.value_prefix_buf.is_empty(),
+                                if self.specifics_flag == JsonsorNestedStreamSpecificsFlag::ArrayForWrapInObject {
+                                    JsonsorNestedStreamSpecificsFlag::ArrayValueWrapper
+                                } else {
+                                    JsonsorNestedStreamSpecificsFlag::None
+                                },
                             );
 
-                            self.handle_type_conflict(&obj_type, out);
 
                             let (is_complete_obj, processed_bytes_num) =
                                 nested_stream.write(&chunk.starting_from(cursor), out);
@@ -298,39 +354,64 @@ impl JsonsorStream {
                                 schema: nested_stream.schema.clone(),
                             };
 
+                            let is_type_modified_during_type_inference = expected_field_type != Some(&inferred_type);
+
                             if !is_complete_obj {
                                 self.stack.push(nested_stream);
                             }
 
                             // TODO: decrement by 1 because the output shift is rather a number of
                             // processed bytes, not the cursor shift
-                            (inferred_type, processed_bytes_num - 1, vec![])
+                            (inferred_type, processed_bytes_num - 1, is_type_modified_during_type_inference)
                         }
                         b'[' => {
-                            let mut nested_stream = self.nest_arr(
-                                Arc::new(HashMap::new()), // TODO: init array schema
+                            self.commit_field_name(&arr_obj_type, out);
+
+                            let expected_field_type = self.schema.get(&self.current_field_name_buf);
+
+                            println!(
+                                "{}[{}] Nesting array for field '{}' of type {}",
+                                "\t".repeat(self.nested_level),
+                                cursor,
+                                String::from_utf8_lossy(&self.current_field_name_buf),
+                                expected_field_type.unwrap_or(&JsonsorFieldType::Null)
                             );
 
-                            self.handle_type_conflict(&arr_obj_type, out);
+                            let nested_stream_init_schema: Arc<HashMap<Vec<u8>, JsonsorFieldType>> =
+                                if let Some(JsonsorFieldType::Array { item_type }) = expected_field_type {
+                                    let mut array_schema_with_item = HashMap::new();
+                                    array_schema_with_item.insert(
+                                        vec![],
+                                        (**item_type).clone(),
+                                    );
+                                    Arc::new(array_schema_with_item)
+                            } else {
+                                Arc::new(HashMap::new())
+                            };
+
+                            let mut nested_stream = self.nest_arr(
+                                nested_stream_init_schema,
+                            );
 
                             let (is_complete_array, processed_bytes_num) =
                                 nested_stream.write(&chunk.starting_from(cursor), out);
-                            let inferred_type = JsonsorFieldType::Array {
-                                // Array item is a field without a name. Valid JSON cannot have an
-                                // empty field name.
-                                item_type: Box::new(
+
+                            let inferred_item_type =
                                     nested_stream
                                         .schema
                                         .get(&vec![])
                                         .cloned()
-                                        .unwrap_or(JsonsorFieldType::Null),
-                                ),
+                                        .unwrap_or(JsonsorFieldType::Null);
+
+                            let inferred_type = JsonsorFieldType::Array {
+                                item_type: Box::new(inferred_item_type)
                             };
+                            let is_type_modified_during_type_inference = expected_field_type != Some(&inferred_type);
 
                             if !is_complete_array {
                                 self.stack.push(nested_stream);
                             }
-                            (inferred_type, processed_bytes_num - 1, vec![])
+                            (inferred_type, processed_bytes_num - 1, is_type_modified_during_type_inference)
                         }
                         _ => panic!(
                             "Unexpected byte while inferring field value type: '{}'",
@@ -339,12 +420,15 @@ impl JsonsorStream {
                     };
 
                     cursor += cursor_shift;
-                    if !content.is_empty() {
-                        self.handle_type_conflict(&dtype, out);
+                    let should_schema_be_modified = if dtype.is_primitive() {
+                        let is_primitive_type_updated = self.commit_field_name(&dtype, out);
                         if !(self.config.exclude_null_fields && dtype == JsonsorFieldType::Null) {
-                            out.write_all(&content).expect("Failed to write to output");
+                            out.write_all(&[*byte]).expect("Failed to write to output");
                         }
-                    }
+                        is_primitive_type_updated
+                    } else {
+                        is_type_modified_during_type_inference
+                    };
 
                     // Reset buffers and status
                     self.current_field_buf.clear();
@@ -352,12 +436,24 @@ impl JsonsorStream {
                         dtype: dtype.clone(),
                     };
 
-                    if self.schema.get(&self.current_field_name_buf)
-                        .filter(|prev_type| dtype == JsonsorFieldType::Null || !self.types_differ(*prev_type, &dtype)).is_some() {
-                        println!("Field '{}' is already in schema, and new value is null. Keeping existing type.", String::from_utf8_lossy(&self.current_field_buf));
-                    } else if !(self.config.exclude_null_fields && dtype == JsonsorFieldType::Null) {
+                    if dtype != JsonsorFieldType::Null && should_schema_be_modified {
                         Arc::make_mut(&mut self.schema)
                             .insert(self.current_field_name_buf.clone(), dtype.clone());
+                        println!(
+                            "{}[{}] Field '{}' type {} differs from the schema. Schema is updated",
+                            "\t".repeat(self.nested_level),
+                            cursor,
+                            String::from_utf8_lossy(&self.current_field_name_buf),
+                            dtype
+                        );
+                    } else {
+                        println!(
+                            "{}[{}] Field '{}' type {} matches the schema",
+                            "\t".repeat(self.nested_level),
+                            cursor,
+                            String::from_utf8_lossy(&self.current_field_name_buf),
+                            dtype
+                        );
                     }
                 }
                 JsonsorStreamStatus::PassingFieldValue { dtype } => {
@@ -380,7 +476,11 @@ impl JsonsorStream {
                         _ => {
                             match *byte {
                                 b',' => {
-                                    if self.is_field_value_wrapper {
+                                    if !is_field_excluded {
+                                        self.has_previous_field = true;
+                                    }
+
+                                    if self.specifics_flag == JsonsorNestedStreamSpecificsFlag::ArrayValueWrapper {
                                         out.write_all(b"}").expect("Failed to write to output");
                                         println!(
                                             "{}[{}] Wrapping completed with status {:?}",
@@ -402,9 +502,12 @@ impl JsonsorStream {
                                         self.current_status = JsonsorStreamStatus::SeekingFieldName;
                                         self.current_field_name_buf.clear();
                                     }
+                                    cursor += 1; // move to the next byte
+                                    self.previous_char = *byte;
+                                    continue;
                                 }
                                 b'}' | b']' => {
-                                    if self.is_field_value_wrapper {
+                                    if self.specifics_flag == JsonsorNestedStreamSpecificsFlag::ArrayValueWrapper {
                                         out.write_all(b"}").expect("Failed to write to output");
                                         println!(
                                             "{}[{}] Wrapping completed with status {:?}",
@@ -435,6 +538,7 @@ impl JsonsorStream {
                 JsonsorStreamStatus::ReachedObjectEnd => {
                     // TODO: increment by 1 to make the final cursor equal to the chunk length.
                     // Why?
+                    self.has_previous_field = false;
                     self.current_status = JsonsorStreamStatus::SeekingObjectStart;
 
                     // root stream has no early exit on object end due to NDJSON structure
@@ -459,29 +563,71 @@ impl JsonsorStream {
         return (self.current_status == JsonsorStreamStatus::SeekingObjectStart, cursor);
     }
 
-    fn handle_type_conflict<W: Write>(&mut self, target_type: &JsonsorFieldType, out: &mut W) {
+    // returns true if the schema is logically updated (field name was suffixed or new field)
+    fn commit_field_name<W: Write>(&mut self, target_type: &JsonsorFieldType, out: &mut W) -> bool {
         if !(self.config.exclude_null_fields && *target_type == JsonsorFieldType::Null) {
             // TODO: Get via args
             let expected_field_type = self.schema.get(&self.current_field_name_buf);
-            if let Some(expected_type) = expected_field_type {
-                if self.types_differ(target_type, expected_type) {
-                    // TODO: Exclude null if needed
-                    let suffix = self.type_suffix(target_type);
-                    if !self.current_field_name_buf.is_empty() {
-                        self.current_field_buf.extend_from_slice(suffix.as_bytes());
-                        self.current_field_name_buf
-                        .extend_from_slice(suffix.as_bytes());
+
+            let mut should_be_suffixed = self.config.heterogeneous_array_strategy == HeterogeneousArrayStrategy::WrapInObject &&
+                matches!(target_type, JsonsorFieldType::Array { item_type: _ });
+
+            if should_be_suffixed {
+                println!(
+                    "{} Field '{}' should be suffixed due to array strategy",
+                    "\t".repeat(self.nested_level),
+                    String::from_utf8_lossy(&self.current_field_name_buf)
+                );
+            }
+
+            if !should_be_suffixed {
+                if let Some(expected_type) = expected_field_type {
+                    if self.types_differ(target_type, expected_type) {
+                        println!(
+                            "{} Field '{}' type {} differs from the schema type {}",
+                            "\t".repeat(self.nested_level),
+                            String::from_utf8_lossy(&self.current_field_name_buf),
+                            target_type,
+                            expected_type
+                        );
+                        should_be_suffixed = true;
                     }
                 }
+            }
+
+            if should_be_suffixed {
+
+                println!(
+                    "{} Suffixing field '{}' of type {}",
+                    "\t".repeat(self.nested_level),
+                    String::from_utf8_lossy(&self.current_field_name_buf),
+                    target_type
+                );
+
+                let suffix = self.type_suffix(target_type);
+                if !self.current_field_name_buf.is_empty() {
+                    self.current_field_buf.extend_from_slice(suffix.as_bytes());
+                    self.current_field_name_buf
+                        .extend_from_slice(suffix.as_bytes());
+                }
+            }
+
+            if self.has_previous_field {
+                out.write_all(b",").expect("Failed to write to output");
+                self.has_previous_field = false;
             }
 
             out.write_all(&self.current_field_buf).expect("Failed to write to output");
             if !self.current_field_name_buf.is_empty() {
                 out.write_all(b"\":").expect("Failed to write to output");
             }
+
+            return should_be_suffixed || expected_field_type.is_none();
         }
 
         self.current_field_buf.clear();
+
+        return false;
     }
 
     fn update_current_field_schema(&mut self, updated_schema: &Arc<HashMap<Vec<u8>, JsonsorFieldType>>) {

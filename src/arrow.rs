@@ -86,9 +86,54 @@ pub fn process_to_arrow<R: Read, W: Write>(
         output: &mut W,
         init_schema: arrow::datatypes::Schema,
         config: JsonsorConfig,
-    ) -> Result<Arc<arrow::datatypes::Schema>, std::io::Error> {
+    ) -> Result<arrow::datatypes::Schema, std::io::Error> {
     // TODO: write to the output in Arrow format
-    let jsonsor_schema = arrow_schema_to_jsonsor_schema(&init_schema);
-    let final_schema = Jsonsor::process_stream(input, output, jsonsor_schema, config).expect("Processing failed");
-    Ok(Arc::new(jsonsor_schema_to_arrow_schema(final_schema)))
+    let jsonsor_init_schema = arrow_schema_to_jsonsor_schema(&init_schema);
+
+    // TODO: Inject into output the pipe inside of the pipe produce RecordBatches and stream them
+    // into IPC stream
+    // use pipe::pipe;
+    // use std::io::{Read, Write, Result};
+    // use std::thread;
+
+    // fn process_stream<R: Read, W: Write>(mut reader: R, mut writer: W) -> Result<()> {
+    //     // Example: copy data
+    //     std::io::copy(&mut reader, &mut writer)?;
+    //     Ok(())
+    // }
+
+    // fn proxy_stream<R: Read, W: Write>(mut input: R, mut output: W) -> Result<()> {
+    //     let (mut pipe_reader, mut pipe_writer) = pipe();
+
+    //     // Spawn a thread to run the original function
+    //     let handle = thread::spawn(move || {
+    //         process_stream(input, pipe_writer).unwrap();
+    //     });
+
+    //     // In the proxy, read from pipe_reader, process, and write to output
+    //     let mut buf = [0u8; 4096];
+    //     loop {
+    //         let n = pipe_reader.read(&mut buf)?;
+    //         if n == 0 { break; }
+    //         // Process buf[..n] as needed
+    //         output.write_all(&buf[..n])?;
+    //     }
+
+    //     handle.join().unwrap();
+    //     Ok(())
+    // }
+
+    match Jsonsor::process_stream(input, output, jsonsor_init_schema, config) {
+        Ok(jsonsor_final_schema) => {
+            // Convert final Jsonsor schema to Arrow schema
+            let arrow_final_schema = jsonsor_schema_to_arrow_schema(jsonsor_final_schema);
+            Ok(arrow_final_schema)
+        }
+        Err(e) => Err(e),
+    }
 }
+
+
+#[cfg(feature = "ffi")]
+#[no_mangle]
+pub extern "C" fn process_to_arrow_ffi() {}
