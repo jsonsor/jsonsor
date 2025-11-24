@@ -1,6 +1,12 @@
-use std::{collections::HashMap, io::Write, io::Read, sync::Arc};
+use std::{collections::HashMap, io::{Read, Write}, sync::Arc, thread::spawn};
+
+use arrow::{array::{RecordBatchReader}, ipc::writer::StreamWriter, json::ReaderBuilder};
+use io_pipe::pipe;
 
 use crate::{jsonsor::Jsonsor, stream::{JsonsorConfig, JsonsorFieldType}};
+
+#[cfg(feature = "ffi")]
+use arrow::{ffi::FFI_ArrowSchema, ffi_stream::FFI_ArrowArrayStream};
 
 
 pub fn jsonsor_schema_to_arrow_schema(
@@ -81,59 +87,140 @@ pub fn arrow_schema_to_jsonsor_schema(
     schema_map
 }
 
-pub fn process_to_arrow<R: Read, W: Write>(
-        input: &mut R,
+/// Processes an input NDJSON byte stream using Jsonsor into Arrow RecordBatches.
+///
+/// input - A reader for the input NDJSON stream.
+/// init_schema - The initial Arrow schema to start with.
+/// config - Configuration for Jsonsor processing.
+///
+/// Returns a tuple containing:
+/// - A RecordBatchReader for the resulting Arrow RecordBatches.
+/// - The reconciled Arrow schema after processing.
+pub fn process_to_arrow<R>(
+        mut input: R,
+        init_schema: arrow::datatypes::Schema,
+        config: JsonsorConfig,
+    ) -> Result<(Box<dyn RecordBatchReader + Send + 'static>, Arc<arrow::datatypes::Schema>), std::io::Error>
+    where
+        R: Read + Send + 'static,
+    {
+
+    let jsonsor_init_schema = arrow_schema_to_jsonsor_schema(&init_schema);
+    let (mut reconciled_ndjson_writer, reconciled_ndjson_reader) = pipe();
+
+    let reconciliating_thread = spawn(move || {
+        let mut jsonsor = Jsonsor::new(jsonsor_init_schema, config);
+        jsonsor.process_stream(&mut input, &mut reconciled_ndjson_writer)
+    });
+
+    let reconciled_schema = Arc::new(
+        reconciliating_thread
+                .join()
+                .expect("Reconciliating thread panicked")
+                .map(|jsonsor_schema| {
+                    jsonsor_schema_to_arrow_schema(jsonsor_schema)
+                })
+                .expect("Failed to convert schema")
+    );
+
+    let reader_to_arrow = ReaderBuilder::new(reconciled_schema.clone())
+        .build(reconciled_ndjson_reader)
+        .expect("Failed to create Arrow JSON reader");
+
+    Ok((Box::new(reader_to_arrow), reconciled_schema))
+}
+
+/// Processes an input NDJSON byte stream using Jsonsor into Arrow IPC.
+///
+/// input - A reader for the input NDJSON stream.
+/// output - A writer for the output Arrow IPC stream.
+/// init_schema - The initial Arrow schema to start with.
+/// config - Configuration for Jsonsor processing.
+/// Returns the reconciled Arrow schema after processing.
+pub fn process_to_arrow_ipc<R, W>(
+        input: R,
         output: &mut W,
         init_schema: arrow::datatypes::Schema,
         config: JsonsorConfig,
-    ) -> Result<arrow::datatypes::Schema, std::io::Error> {
-    // TODO: write to the output in Arrow format
-    let jsonsor_init_schema = arrow_schema_to_jsonsor_schema(&init_schema);
+    ) -> Result<arrow::datatypes::Schema, std::io::Error>
+    where
+        R: Read + Send + 'static,
+        W: Write
+    {
+    let (reader_to_arrow, reconciled_schema) = process_to_arrow(
+        input,
+        init_schema,
+        config,
+    ).expect("Failed to process to Arrow batches");
 
-    // TODO: Inject into output the pipe inside of the pipe produce RecordBatches and stream them
-    // into IPC stream
-    // use pipe::pipe;
-    // use std::io::{Read, Write, Result};
-    // use std::thread;
+    let mut arrow_ipc_writer = StreamWriter::try_new(output, &reconciled_schema).expect("Failed to create Arrow IPC writer");
 
-    // fn process_stream<R: Read, W: Write>(mut reader: R, mut writer: W) -> Result<()> {
-    //     // Example: copy data
-    //     std::io::copy(&mut reader, &mut writer)?;
-    //     Ok(())
-    // }
+    for batch in reader_to_arrow {
+        let batch = batch.expect("Failed to read record batch from JSON");
+        arrow_ipc_writer
+            .write(&batch)
+            .expect("Failed to write record batch to Arrow IPC");
+    }
 
-    // fn proxy_stream<R: Read, W: Write>(mut input: R, mut output: W) -> Result<()> {
-    //     let (mut pipe_reader, mut pipe_writer) = pipe();
+    arrow_ipc_writer.finish().expect("Failed to finish Arrow IPC writing");
 
-    //     // Spawn a thread to run the original function
-    //     let handle = thread::spawn(move || {
-    //         process_stream(input, pipe_writer).unwrap();
-    //     });
+    Ok(reconciled_schema.as_ref().clone())
+}
 
-    //     // In the proxy, read from pipe_reader, process, and write to output
-    //     let mut buf = [0u8; 4096];
-    //     loop {
-    //         let n = pipe_reader.read(&mut buf)?;
-    //         if n == 0 { break; }
-    //         // Process buf[..n] as needed
-    //         output.write_all(&buf[..n])?;
-    //     }
+#[cfg(feature = "ffi")]
+#[no_mangle]
+pub extern "C" fn process_to_arrow_ffi(
+    input_ptr: *const u8,
+    input_len: usize,
+    input_schema_ptr: *mut FFI_ArrowSchema,
+    output_schema_ptr: *mut FFI_ArrowSchema,
+) -> *mut FFI_ArrowArrayStream {
+    let input_slice = unsafe { std::slice::from_raw_parts(input_ptr, input_len) };
+    let input_reader = std::io::Cursor::new(input_slice);
 
-    //     handle.join().unwrap();
-    //     Ok(())
-    // }
+    let init_schema = unsafe {
+        arrow::datatypes::Schema::try_from(&*input_schema_ptr).expect("Failed to convert FFI Arrow schema")
+    };
 
-    match Jsonsor::process_stream(input, output, jsonsor_init_schema, config) {
-        Ok(jsonsor_final_schema) => {
-            // Convert final Jsonsor schema to Arrow schema
-            let arrow_final_schema = jsonsor_schema_to_arrow_schema(jsonsor_final_schema);
-            Ok(arrow_final_schema)
+    let config = JsonsorConfig {
+        field_name_processors: vec![],
+        heterogeneous_array_strategy: crate::stream::HeterogeneousArrayStrategy::WrapInObject,
+        exclude_null_fields: true,
+        input_buffer_size: 8192,
+        output_buffer_size: 8192,
+    };
+
+    match process_to_arrow(
+        input_reader,
+        init_schema,
+        config,
+    ) {
+        Ok((arrow_reader, reconciled_schema)) => {
+            let ffi_stream = FFI_ArrowArrayStream::new(arrow_reader);
+            let ffi_output_schema = FFI_ArrowSchema::try_from(&*reconciled_schema)
+                .expect("Failed to convert reconciled schema to FFI Arrow schema");
+
+            unsafe {
+                std::ptr::write(output_schema_ptr, ffi_output_schema);
+            }
+
+            return Box::into_raw(Box::new(ffi_stream));
         }
-        Err(e) => Err(e),
+        Err(e) => {
+            panic!("Error processing to Arrow: {}", e);
+        }
     }
 }
 
 
 #[cfg(feature = "ffi")]
 #[no_mangle]
-pub extern "C" fn process_to_arrow_ffi() {}
+pub extern "C" fn free_ffi_arrow_array_stream(
+    stream_ptr: *mut FFI_ArrowArrayStream,
+) {
+    if !stream_ptr.is_null() {
+        unsafe {
+            drop(Box::from_raw(stream_ptr));
+        }
+    }
+}

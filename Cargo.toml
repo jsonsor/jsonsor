@@ -8,13 +8,14 @@ crate-type = ["lib", "cdylib"]
 
 [features]
 default = ["arrow", "ffi"]
-arrow = ["dep:arrow"]
+arrow = ["dep:arrow", "dep:io-pipe"]
 ffi = []
 
 [dependencies]
 flate2 = "1.1.5"
-mimalloc = { version = "*", features = ["v3"] }
-arrow = { version = "57", features = ["json"], optional = true }
+mimalloc = { version = "0.1.48", features = ["v3"] }
+arrow = { version = "57", features = ["json", "ffi"], optional = true }
+io-pipe = { version = "0.7.3", optional = true }
 
 [profile.release]
 opt-level = 3

@@ -16,13 +16,13 @@ fn test_reconcile_case1() {
 
     let mut reconciliating_stream = JsonsorStream::new(
         init_schema,
-        JsonsorConfig {
+        Arc::new(JsonsorConfig {
             field_name_processors: vec![],
             heterogeneous_array_strategy: HeterogeneousArrayStrategy::KeepAsIs,
             input_buffer_size: 8192,
             output_buffer_size: 8192,
             exclude_null_fields: false,
-        },
+        }),
     );
     let (output, is_complete_obj, offset) = reconciliating_stream.write_raw(input);
     assert_eq!(offset, input.len());
@@ -43,13 +43,13 @@ fn test_reconcile_case2() {
 
     let mut reconciliating_stream = JsonsorStream::new(
         init_schema,
-        JsonsorConfig {
+        Arc::new(JsonsorConfig {
             field_name_processors: vec![],
             heterogeneous_array_strategy: HeterogeneousArrayStrategy::KeepAsIs,
             input_buffer_size: 8192,
             output_buffer_size: 8192,
             exclude_null_fields: false,
-        },
+        }),
     );
     let (output, is_complete_obj, offset) = reconciliating_stream.write_raw(input);
     assert_eq!(offset, input.len());
@@ -70,19 +70,19 @@ fn test_reconcile_case3() {
 
     let mut reconciliating_stream = JsonsorStream::new(
         init_schema,
-        JsonsorConfig {
+        Arc::new(JsonsorConfig {
             field_name_processors: vec![],
             heterogeneous_array_strategy: HeterogeneousArrayStrategy::KeepAsIs,
             input_buffer_size: 8192,
             output_buffer_size: 8192,
             exclude_null_fields: false,
-        },
+        }),
     );
     let (output, is_complete_obj, offset) = reconciliating_stream.write_raw(input);
     assert_eq!(offset, input.len());
     assert!(is_complete_obj);
     println!("Output: {:?}", String::from_utf8_lossy(&output));
-    println!("Schema: {:?}", reconciliating_stream.schema);
+    println!("Schema: {:?}", reconciliating_stream.schema());
 
     let expected_output =
         "{\"text\":\"Some text with quotes \\\" {inside} \", \"another_text\":\"More } ] text\"}";
@@ -95,13 +95,13 @@ fn test_reconcile_case4() {
     let init_schema = std::collections::HashMap::new();
     let mut reconciliating_stream = JsonsorStream::new(
         init_schema,
-        JsonsorConfig {
+        Arc::new(JsonsorConfig {
             field_name_processors: vec![],
             heterogeneous_array_strategy: HeterogeneousArrayStrategy::KeepAsIs,
             input_buffer_size: 8192,
             output_buffer_size: 8192,
             exclude_null_fields: false,
-        },
+        }),
     );
     let (output, is_complete_obj, offset) = reconciliating_stream.write_raw(input);
     assert_eq!(offset, input.len());
@@ -118,20 +118,20 @@ fn test_reconcile_case5() {
     let init_schema = std::collections::HashMap::new();
     let mut reconciliating_stream = JsonsorStream::new(
         init_schema,
-        JsonsorConfig {
+        Arc::new(JsonsorConfig {
             field_name_processors: vec![],
             heterogeneous_array_strategy: HeterogeneousArrayStrategy::WrapInObject,
             input_buffer_size: 8192,
             output_buffer_size: 8192,
             exclude_null_fields: false,
-        },
+        }),
     );
     let (output, is_complete_obj, offset) = reconciliating_stream.write_raw(input);
     assert_eq!(offset, input.len());
     assert!(is_complete_obj);
     println!("Output: {:?}", String::from_utf8_lossy(&output));
 
-    print_schema(&reconciliating_stream.schema);
+    print_schema(&reconciliating_stream.schema());
     let expected_output = "{\"a__arr__obj\":[{\"value\":1},{\"value\":2},{\"value\":3}]}\n{\"a__arr__obj\":[{\"value__str\":\"one\"},{\"value__str\":\"two\"},{\"value__str\":\"three\"}]}\n{\"a__arr__obj\":[{\"value\":4.0},{\"value\":5.0},{\"value\":6.0}]}\n{\"a__arr__obj\":[{\"value__bool\":true},{\"value__bool\":false},{\"value__bool\":true}]}\n{\"a__arr__obj\":[{\"value__obj\":{\"key\":\"value\"}},{\"value__obj\":{\"key2\":\"value2\"}}]}";
     assert_eq!(String::from_utf8_lossy(&output), expected_output);
 }
@@ -142,13 +142,13 @@ fn test_reconcile_case6() {
     let init_schema = std::collections::HashMap::new();
     let mut reconciliating_stream = JsonsorStream::new(
         init_schema,
-        JsonsorConfig {
+        Arc::new(JsonsorConfig {
             field_name_processors: vec![],
             heterogeneous_array_strategy: HeterogeneousArrayStrategy::WrapInObject,
             input_buffer_size: 8192,
             output_buffer_size: 8192,
             exclude_null_fields: true,
-        },
+        }),
     );
     let (output, is_complete_obj, offset) = reconciliating_stream.write_raw(input);
     assert_eq!(offset, input.len());
@@ -165,19 +165,19 @@ fn test_reconcile_case7() {
     let init_schema = std::collections::HashMap::new();
     let mut reconciliating_stream = JsonsorStream::new(
         init_schema,
-        JsonsorConfig {
+        Arc::new(JsonsorConfig {
             field_name_processors: vec![],
             heterogeneous_array_strategy: HeterogeneousArrayStrategy::WrapInObject,
             input_buffer_size: 8192,
             output_buffer_size: 8192,
             exclude_null_fields: true,
-        },
+        }),
     );
     let (output, is_complete_obj, offset) = reconciliating_stream.write_raw(input);
     assert_eq!(offset, input.len());
     assert!(is_complete_obj);
     println!("Output: {:?}", String::from_utf8_lossy(&output));
-    print_schema(&reconciliating_stream.schema);
+    print_schema(&reconciliating_stream.schema());
 
     let expected_output = "{\"a__arr__obj\":[], \"d\":{}}\n{\"a__arr__obj\":[{}], \"f\":{\"g\":{}, \"h\":1}}\n{\"a__arr__obj\":[], \"b__arr__obj\":[{\"value\":{}}]}";
     assert_eq!(String::from_utf8_lossy(&output), expected_output);
@@ -190,13 +190,13 @@ fn test_reconcile_unicode() {
 
     let mut reconciliating_stream = JsonsorStream::new(
         init_schema,
-        JsonsorConfig {
+        Arc::new(JsonsorConfig {
             field_name_processors: vec![],
             heterogeneous_array_strategy: HeterogeneousArrayStrategy::KeepAsIs,
             input_buffer_size: 8192,
             output_buffer_size: 8192,
             exclude_null_fields: false,
-        },
+        }),
     );
     let (output, is_complete_obj, offset) = reconciliating_stream.write_raw(input);
     assert_eq!(offset, input.len());
@@ -215,7 +215,7 @@ fn test_field_name_processor_lowercase() {
 
     let mut reconciliating_stream = JsonsorStream::new(
         init_schema,
-        JsonsorConfig {
+        Arc::new(JsonsorConfig {
             field_name_processors: vec![
                 Arc::new(LowercaseFieldNameProcessor{}),
             ],
@@ -223,7 +223,7 @@ fn test_field_name_processor_lowercase() {
             input_buffer_size: 8192,
             output_buffer_size: 8192,
             exclude_null_fields: false,
-        },
+        }),
     );
 
     let (output, is_complete_obj, offset) = reconciliating_stream.write_raw(input);
@@ -245,7 +245,7 @@ fn test_field_name_processor_lowercase_wrap_array_in_object() {
 
     let mut reconciliating_stream = JsonsorStream::new(
         init_schema,
-        JsonsorConfig {
+        Arc::new(JsonsorConfig {
             field_name_processors: vec![
                 Arc::new(LowercaseFieldNameProcessor{}),
             ],
@@ -253,7 +253,7 @@ fn test_field_name_processor_lowercase_wrap_array_in_object() {
             input_buffer_size: 8192,
             output_buffer_size: 8192,
             exclude_null_fields: false,
-        },
+        }),
     );
 
     let (output, is_complete_obj, offset) = reconciliating_stream.write_raw(input);
@@ -275,7 +275,7 @@ fn test_field_name_processor_unwanted_chars() {
 
     let mut reconciliating_stream = JsonsorStream::new(
         init_schema,
-        JsonsorConfig {
+        Arc::new(JsonsorConfig {
             field_name_processors: vec![
                 Arc::new(ReplaceCharsFieldNameProcessor::new(" -!?.", "_"))
             ],
@@ -283,7 +283,7 @@ fn test_field_name_processor_unwanted_chars() {
             input_buffer_size: 8192,
             output_buffer_size: 8192,
             exclude_null_fields: false,
-        },
+        }),
     );
 
     let (output, is_complete_obj, offset) = reconciliating_stream.write_raw(input);
@@ -306,13 +306,13 @@ fn test_reconcile_nested_obj_case1() {
 
     let mut reconciliating_stream = JsonsorStream::new(
         init_schema,
-        JsonsorConfig {
+        Arc::new(JsonsorConfig {
             field_name_processors: vec![],
             heterogeneous_array_strategy: HeterogeneousArrayStrategy::KeepAsIs,
             input_buffer_size: 8192,
             output_buffer_size: 8192,
             exclude_null_fields: false,
-        },
+        }),
     );
     let (output, completed, offset) = reconciliating_stream.write_raw(input);
     assert_eq!(offset, input.len());
@@ -337,19 +337,19 @@ fn test_reconcile_nested_arr_case1() {
 
     let mut reconciliating_stream = JsonsorStream::new(
         init_schema,
-        JsonsorConfig {
+        Arc::new(JsonsorConfig {
             field_name_processors: vec![],
             heterogeneous_array_strategy: HeterogeneousArrayStrategy::KeepAsIs,
             input_buffer_size: 8192,
             output_buffer_size: 8192,
             exclude_null_fields: false,
-        },
+        }),
     );
     let (output, completed, offset) = reconciliating_stream.write_raw(input);
     assert_eq!(offset, input.len());
     assert!(completed);
     println!("Output: {:?}", String::from_utf8_lossy(&output));
-    println!("Schema: {:?}", reconciliating_stream.schema);
+    println!("Schema: {:?}", reconciliating_stream.schema());
 
     // TODO: Doesn't really work. items__arr__obj should be iteams__arr__num
     // It happens because the array type is hardcoded. No way to check the actual type in advance.
@@ -371,19 +371,19 @@ fn test_reconcile_nested_arr_case1_arr_wrap_in_object() {
 
     let mut reconciliating_stream = JsonsorStream::new(
         init_schema,
-        JsonsorConfig {
+        Arc::new(JsonsorConfig {
             field_name_processors: vec![],
             heterogeneous_array_strategy: HeterogeneousArrayStrategy::WrapInObject,
             input_buffer_size: 8192,
             output_buffer_size: 8192,
             exclude_null_fields: false,
-        },
+        }),
     );
     let (output, completed, offset) = reconciliating_stream.write_raw(input);
     assert_eq!(offset, input.len());
     assert!(completed);
     println!("Output: {:?}", String::from_utf8_lossy(&output));
-    println!("Schema: {:?}", reconciliating_stream.schema);
+    println!("Schema: {:?}", reconciliating_stream.schema());
 
     let expected_output = "{\"items__arr__obj\":[{\"value\":1},{\"value\":2},{\"value\":3}], \"details__arr__obj\":[{\"value\":{\"name\":\"Item1\", \"price\":19.99}},{\"value\":{\"name\":\"Item2\", \"price\":29.99}}]}";
     assert_eq!(String::from_utf8_lossy(&output), expected_output);
@@ -398,19 +398,19 @@ fn test_reconcile_heterogeneous_arr_case1() {
 
     let mut reconciliating_stream = JsonsorStream::new(
         init_schema,
-        JsonsorConfig {
+        Arc::new(JsonsorConfig {
             field_name_processors: vec![],
             heterogeneous_array_strategy: HeterogeneousArrayStrategy::WrapInObject,
             input_buffer_size: 8192,
             output_buffer_size: 8192,
             exclude_null_fields: false,
-        },
+        }),
     );
     let (output, completed, offset) = reconciliating_stream.write_raw(input);
     assert_eq!(offset, input.len());
     assert!(completed);
     println!("Output: {:?}", String::from_utf8_lossy(&output));
-    println!("Schema: {:?}", reconciliating_stream.schema);
+    println!("Schema: {:?}", reconciliating_stream.schema());
 
     let expected_output = "{\"values__arr__obj\":[{\"value\":1},{\"value__str\":\"two\"},{\"value\":3.0},{\"value__bool\":true},{\"value__obj\":{\"key\":\"value\"}}]}";
     assert_eq!(String::from_utf8_lossy(&output), expected_output);
@@ -422,47 +422,47 @@ fn test_streaming_reconciliation1() {
 
     let mut reconciliating_stream = JsonsorStream::new(
         init_schema,
-        JsonsorConfig {
+        Arc::new(JsonsorConfig {
             field_name_processors: vec![],
             heterogeneous_array_strategy: HeterogeneousArrayStrategy::KeepAsIs,
             input_buffer_size: 8192,
             output_buffer_size: 8192,
             exclude_null_fields: false,
-        },
+        }),
     );
     let (output1, _, _) = reconciliating_stream.write_raw(b"{\"id\": 1, \"value\": \"test\"");
-    print_schema(&reconciliating_stream.schema);
+    print_schema(&reconciliating_stream.schema());
     assert_eq!(
         String::from_utf8_lossy(&output1),
         "{\"id\":1, \"value\":\"test\""
     );
 
     let (output2, _, _) = reconciliating_stream.write_raw(b", \"active\": true}");
-    print_schema(&reconciliating_stream.schema);
+    print_schema(&reconciliating_stream.schema());
     assert_eq!(String::from_utf8_lossy(&output2), ", \"active\":true}");
 
     let (output3, _, _) = reconciliating_stream.write_raw(b"");
-    print_schema(&reconciliating_stream.schema);
+    print_schema(&reconciliating_stream.schema());
     assert_eq!(String::from_utf8_lossy(&output3), "");
 
     let (output4, _, _) = reconciliating_stream.write_raw(b"{");
-    print_schema(&reconciliating_stream.schema);
+    print_schema(&reconciliating_stream.schema());
     assert_eq!(String::from_utf8_lossy(&output4), "{");
 
     let (output5, _, _) = reconciliating_stream.write_raw(b"\"id\":");
-    print_schema(&reconciliating_stream.schema);
+    print_schema(&reconciliating_stream.schema());
     assert_eq!(String::from_utf8_lossy(&output5), ""); // No output yet, waiting for the value type
                                                       // to decide on removing it entirely
 
     let (output6, _, _) = reconciliating_stream.write_raw(b" \"2\", \"value\": null, \"active\": false");
-    print_schema(&reconciliating_stream.schema);
+    print_schema(&reconciliating_stream.schema());
     assert_eq!(
         String::from_utf8_lossy(&output6),
         "\"id__str\":\"2\", \"value\":null, \"active\":false"
     );
 
     let (output7, _, _) = reconciliating_stream.write_raw(b"}");
-    print_schema(&reconciliating_stream.schema);
+    print_schema(&reconciliating_stream.schema());
     assert_eq!(String::from_utf8_lossy(&output7), "}");
 }
 
@@ -472,47 +472,47 @@ fn test_streaming_reconciliation1_arr_wrap_in_object() {
 
     let mut reconciliating_stream = JsonsorStream::new(
         init_schema,
-        JsonsorConfig {
+        Arc::new(JsonsorConfig {
             field_name_processors: vec![],
             heterogeneous_array_strategy: HeterogeneousArrayStrategy::WrapInObject,
             input_buffer_size: 8192,
             output_buffer_size: 8192,
             exclude_null_fields: false,
-        },
+        }),
     );
     let (output1, _, _) = reconciliating_stream.write_raw(b"{\"id\": 1, \"value\": \"test\"");
-    print_schema(&reconciliating_stream.schema);
+    print_schema(&reconciliating_stream.schema());
     assert_eq!(
         String::from_utf8_lossy(&output1),
         "{\"id\":1, \"value\":\"test\""
     );
 
     let (output2, _, _) = reconciliating_stream.write_raw(b", \"active\": true}");
-    print_schema(&reconciliating_stream.schema);
+    print_schema(&reconciliating_stream.schema());
     assert_eq!(String::from_utf8_lossy(&output2), ", \"active\":true}");
 
     let (output3, _, _) = reconciliating_stream.write_raw(b"");
-    print_schema(&reconciliating_stream.schema);
+    print_schema(&reconciliating_stream.schema());
     assert_eq!(String::from_utf8_lossy(&output3), "");
 
     let (output4, _, _) = reconciliating_stream.write_raw(b"{");
-    print_schema(&reconciliating_stream.schema);
+    print_schema(&reconciliating_stream.schema());
     assert_eq!(String::from_utf8_lossy(&output4), "{");
 
     let (output5, _, _) = reconciliating_stream.write_raw(b"\"id\":");
-    print_schema(&reconciliating_stream.schema);
+    print_schema(&reconciliating_stream.schema());
     assert_eq!(String::from_utf8_lossy(&output5), ""); // No output yet, waiting for the value type
                                                       // to decide on removing it entirely
 
     let (output6, _, _) = reconciliating_stream.write_raw(b" \"2\", \"value\": null, \"active\": false");
-    print_schema(&reconciliating_stream.schema);
+    print_schema(&reconciliating_stream.schema());
     assert_eq!(
         String::from_utf8_lossy(&output6),
         "\"id__str\":\"2\", \"value\":null, \"active\":false"
     );
 
     let (output7, _, _) = reconciliating_stream.write_raw(b"}");
-    print_schema(&reconciliating_stream.schema);
+    print_schema(&reconciliating_stream.schema());
     assert_eq!(String::from_utf8_lossy(&output7), "}");
 }
 
@@ -522,32 +522,32 @@ fn test_streaming_reconciliation2() {
 
     let mut reconciliating_stream = JsonsorStream::new(
         init_schema,
-        JsonsorConfig {
+        Arc::new(JsonsorConfig {
             field_name_processors: vec![],
             heterogeneous_array_strategy: HeterogeneousArrayStrategy::KeepAsIs,
             input_buffer_size: 8192,
             output_buffer_size: 8192,
             exclude_null_fields: false,
-        },
+        }),
     );
     let (output1, _, _) = reconciliating_stream.write_raw(b"{\"x\": {");
-    print_schema(&reconciliating_stream.schema);
+    print_schema(&reconciliating_stream.schema());
     assert_eq!(String::from_utf8_lossy(&output1), "{\"x\":{");
 
     let (output2, _, _) = reconciliating_stream.write_raw(b"\"a\": true, \"b\": 42");
-    print_schema(&reconciliating_stream.schema);
+    print_schema(&reconciliating_stream.schema());
     assert_eq!(String::from_utf8_lossy(&output2), "\"a\":true, \"b\":42");
 
     let (output3, _, _) = reconciliating_stream.write_raw(b"");
-    print_schema(&reconciliating_stream.schema);
+    print_schema(&reconciliating_stream.schema());
     assert_eq!(String::from_utf8_lossy(&output3), "");
 
     let (output4, _, _) = reconciliating_stream.write_raw(b", \"c3\": \"hello\"},");
-    print_schema(&reconciliating_stream.schema);
+    print_schema(&reconciliating_stream.schema());
     assert_eq!(String::from_utf8_lossy(&output4), ", \"c3\":\"hello\"}");
 
     let (output5, _, _) = reconciliating_stream.write_raw(b"\"y\": 3.14}");
-    print_schema(&reconciliating_stream.schema);
+    print_schema(&reconciliating_stream.schema());
     assert_eq!(String::from_utf8_lossy(&output5), ",\"y\":3.14}");
 }
 
@@ -557,32 +557,32 @@ fn test_streaming_reconciliation3() {
 
     let mut reconciliating_stream = JsonsorStream::new(
         init_schema,
-        JsonsorConfig {
+        Arc::new(JsonsorConfig {
             field_name_processors: vec![],
             heterogeneous_array_strategy: HeterogeneousArrayStrategy::KeepAsIs,
             input_buffer_size: 8192,
             output_buffer_size: 8192,
             exclude_null_fields: false,
-        },
+        }),
     );
     let (output1, _, _) = reconciliating_stream.write_raw(b"{\"data\": [");
-    print_schema(&reconciliating_stream.schema);
+    print_schema(&reconciliating_stream.schema());
     assert_eq!(String::from_utf8_lossy(&output1), "{\"data\":[");
 
     let (output2, _, _) = reconciliating_stream.write_raw(b"{\"id\": 1, \"value\": \"A\"},");
-    print_schema(&reconciliating_stream.schema);
+    print_schema(&reconciliating_stream.schema());
     assert_eq!(String::from_utf8_lossy(&output2), "{\"id\":1, \"value\":\"A\"}");
 
     let (output3, _, _) = reconciliating_stream.write_raw(b"{\"id\": 2");
-    print_schema(&reconciliating_stream.schema);
+    print_schema(&reconciliating_stream.schema());
     assert_eq!(String::from_utf8_lossy(&output3), ",{\"id\":2");
 
     let (output4, _, _) = reconciliating_stream.write_raw(b", \"value__num\":200}, {\"id\": 3, \"value\": true}");
-    print_schema(&reconciliating_stream.schema);
+    print_schema(&reconciliating_stream.schema());
     assert_eq!(String::from_utf8_lossy(&output4), ", \"value__num\":200},{\"id\":3, \"value__bool\":true}");
 
     let (output5, _, _) = reconciliating_stream.write_raw(b"]}");
-    print_schema(&reconciliating_stream.schema);
+    print_schema(&reconciliating_stream.schema());
     assert_eq!(String::from_utf8_lossy(&output5), "]}");
 }
 
@@ -592,35 +592,35 @@ fn test_streaming_reconciliation3_arr_wrap_in_object() {
 
     let mut reconciliating_stream = JsonsorStream::new(
         init_schema,
-        JsonsorConfig {
+        Arc::new(JsonsorConfig {
             field_name_processors: vec![],
             heterogeneous_array_strategy: HeterogeneousArrayStrategy::WrapInObject,
             input_buffer_size: 8192,
             output_buffer_size: 8192,
             exclude_null_fields: false,
-        },
+        }),
     );
     let (output1, _, _) = reconciliating_stream.write_raw(b"{\"data\": [");
-    print_schema(&reconciliating_stream.schema);
+    print_schema(&reconciliating_stream.schema());
     assert_eq!(String::from_utf8_lossy(&output1), "{\"data__arr__obj\":[");
 
     let (output2, _, _) = reconciliating_stream.write_raw(b"{\"id\": 1, \"value\": \"A\"},");
-    print_schema(&reconciliating_stream.schema);
+    print_schema(&reconciliating_stream.schema());
     assert_eq!(String::from_utf8_lossy(&output2), "{\"value\":{\"id\":1, \"value\":\"A\"}}");
 
     let (output3, _, _) = reconciliating_stream.write_raw(b"{\"id\": 2");
-    print_schema(&reconciliating_stream.schema);
+    print_schema(&reconciliating_stream.schema());
     assert_eq!(String::from_utf8_lossy(&output3), ",{\"value\":{\"id\":2");
 
     let (output4, _, _) = reconciliating_stream.write_raw(b", \"value__num\":200}, {\"id\": 3, \"value\": true}");
-    print_schema(&reconciliating_stream.schema);
+    print_schema(&reconciliating_stream.schema());
     // not 
     // assert_eq!(String::from_utf8_lossy(&output4), ", \"value__num\":200}},{\"value\":{\"id\":3, \"value__bool\":true}}");
     // because wrapping object has no bytes in the input after the element object is closed
     assert_eq!(String::from_utf8_lossy(&output4), ", \"value__num\":200}},{\"value\":{\"id\":3, \"value__bool\":true}");
 
     let (output5, _, _) = reconciliating_stream.write_raw(b"]}");
-    print_schema(&reconciliating_stream.schema);
+    print_schema(&reconciliating_stream.schema());
     assert_eq!(String::from_utf8_lossy(&output5), "}]}");
 }
 
@@ -630,42 +630,42 @@ fn test_streaming_reconciliation4() {
 
     let mut reconciliating_stream = JsonsorStream::new(
         init_schema,
-        JsonsorConfig {
+        Arc::new(JsonsorConfig {
             field_name_processors: vec![],
             heterogeneous_array_strategy: HeterogeneousArrayStrategy::KeepAsIs,
             input_buffer_size: 8192,
             output_buffer_size: 8192,
             exclude_null_fields: false,
-        },
+        }),
     );
     let (output1, _, _) = reconciliating_stream.write_raw(b"{\"meta\": {");
-    print_schema(&reconciliating_stream.schema);
-    assert_eq!(reconciliating_stream.schema.get(&b"meta".to_vec()), Some(&JsonsorFieldType::Object { schema: Arc::new(HashMap::new()) }));
+    print_schema(&reconciliating_stream.schema());
+    assert_eq!(reconciliating_stream.schema().get(&b"meta".to_vec()), Some(&JsonsorFieldType::Object { schema: Arc::new(HashMap::new()) }));
     assert_eq!(String::from_utf8_lossy(&output1), "{\"meta\":{");
 
     let (output2, _, _) = reconciliating_stream.write_raw(b"\"version\": 1");
 
-    print_schema(&reconciliating_stream.schema);
+    print_schema(&reconciliating_stream.schema());
     let mut output2_schema = HashMap::new();
     output2_schema.insert(b"version".to_vec(), JsonsorFieldType::Number);
 
-    assert_eq!(reconciliating_stream.schema.get(&b"meta".to_vec()), Some(&JsonsorFieldType::Object { schema: Arc::new(output2_schema) }));
+    assert_eq!(reconciliating_stream.schema().get(&b"meta".to_vec()), Some(&JsonsorFieldType::Object { schema: Arc::new(output2_schema) }));
     assert_eq!(String::from_utf8_lossy(&output2), "\"version\":1");
 
     let (output3, _, _) = reconciliating_stream.write_raw(b", \"type\": \"example\"}, \"data\":{");
     let mut output3_schema = HashMap::new();
     output3_schema.insert(b"version".to_vec(), JsonsorFieldType::Number);
     output3_schema.insert(b"type".to_vec(), JsonsorFieldType::String);
-    assert_eq!(reconciliating_stream.schema.get(&b"meta".to_vec()), Some(&JsonsorFieldType::Object { schema: Arc::new(output3_schema) }));
-    print_schema(&reconciliating_stream.schema);
+    assert_eq!(reconciliating_stream.schema().get(&b"meta".to_vec()), Some(&JsonsorFieldType::Object { schema: Arc::new(output3_schema) }));
+    print_schema(&reconciliating_stream.schema());
     assert_eq!(String::from_utf8_lossy(&output3), ", \"type\":\"example\"}, \"data\":{");
 
     let (output4, _, _) = reconciliating_stream.write_raw(b"\"items\": [\"item1\"");
-    print_schema(&reconciliating_stream.schema);
+    print_schema(&reconciliating_stream.schema());
     assert_eq!(String::from_utf8_lossy(&output4), "\"items\":[\"item1\"");
 
     let (output5, _, _) = reconciliating_stream.write_raw(b", \"item2\"]}}");
-    print_schema(&reconciliating_stream.schema);
+    print_schema(&reconciliating_stream.schema());
     assert_eq!(String::from_utf8_lossy(&output5), ",\"item2\"]}}");
 }
 
@@ -675,42 +675,42 @@ fn test_streaming_reconciliation4_array_wrap_in_object() {
 
     let mut reconciliating_stream = JsonsorStream::new(
         init_schema,
-        JsonsorConfig {
+        Arc::new(JsonsorConfig {
             field_name_processors: vec![],
             heterogeneous_array_strategy: HeterogeneousArrayStrategy::WrapInObject,
             exclude_null_fields: false,
             input_buffer_size: 8192,
             output_buffer_size: 8192,
-        },
+        }),
     );
     let (output1, _, _) = reconciliating_stream.write_raw(b"{\"meta\": {");
-    print_schema(&reconciliating_stream.schema);
-    assert_eq!(reconciliating_stream.schema.get(&b"meta".to_vec()), Some(&JsonsorFieldType::Object { schema: Arc::new(HashMap::new()) }));
+    print_schema(&reconciliating_stream.schema());
+    assert_eq!(reconciliating_stream.schema().get(&b"meta".to_vec()), Some(&JsonsorFieldType::Object { schema: Arc::new(HashMap::new()) }));
     assert_eq!(String::from_utf8_lossy(&output1), "{\"meta\":{");
 
     let (output2, _, _) = reconciliating_stream.write_raw(b"\"version\": 1");
 
-    print_schema(&reconciliating_stream.schema);
+    print_schema(&reconciliating_stream.schema());
     let mut output2_schema = HashMap::new();
     output2_schema.insert(b"version".to_vec(), JsonsorFieldType::Number);
 
-    assert_eq!(reconciliating_stream.schema.get(&b"meta".to_vec()), Some(&JsonsorFieldType::Object { schema: Arc::new(output2_schema) }));
+    assert_eq!(reconciliating_stream.schema().get(&b"meta".to_vec()), Some(&JsonsorFieldType::Object { schema: Arc::new(output2_schema) }));
     assert_eq!(String::from_utf8_lossy(&output2), "\"version\":1");
 
     let (output3, _, _) = reconciliating_stream.write_raw(b", \"type\": \"example\"}, \"data\":{");
     let mut output3_schema = HashMap::new();
     output3_schema.insert(b"version".to_vec(), JsonsorFieldType::Number);
     output3_schema.insert(b"type".to_vec(), JsonsorFieldType::String);
-    assert_eq!(reconciliating_stream.schema.get(&b"meta".to_vec()), Some(&JsonsorFieldType::Object { schema: Arc::new(output3_schema) }));
-    print_schema(&reconciliating_stream.schema);
+    assert_eq!(reconciliating_stream.schema().get(&b"meta".to_vec()), Some(&JsonsorFieldType::Object { schema: Arc::new(output3_schema) }));
+    print_schema(&reconciliating_stream.schema());
     assert_eq!(String::from_utf8_lossy(&output3), ", \"type\":\"example\"}, \"data\":{");
 
     let (output4, _, _) = reconciliating_stream.write_raw(b"\"items\": [\"item1\"");
-    print_schema(&reconciliating_stream.schema);
+    print_schema(&reconciliating_stream.schema());
     assert_eq!(String::from_utf8_lossy(&output4), "\"items__arr__obj\":[{\"value\":\"item1\"");
 
     let (output5, _, _) = reconciliating_stream.write_raw(b", \"item2\"]}}");
-    print_schema(&reconciliating_stream.schema);
+    print_schema(&reconciliating_stream.schema());
     assert_eq!(String::from_utf8_lossy(&output5), "},{\"value\":\"item2\"}]}}");
 }
 
@@ -720,13 +720,13 @@ fn test_multiline_input() {
     let init_schema = std::collections::HashMap::new();
     let mut reconciliating_stream = JsonsorStream::new(
         init_schema,
-        JsonsorConfig {
+        Arc::new(JsonsorConfig {
             field_name_processors: vec![],
             heterogeneous_array_strategy: HeterogeneousArrayStrategy::KeepAsIs,
             exclude_null_fields: false,
             input_buffer_size: 8192,
             output_buffer_size: 8192,
-        },
+        }),
     );
     let (output, is_complete, processed_bytes) = reconciliating_stream.write_raw(input);
     assert!(is_complete);
@@ -735,7 +735,7 @@ fn test_multiline_input() {
     let expected_output = "{\"a\":1, \"b\":true}\n{\"a__str\":\"two\", \"b\":false}\n{\"a\":3.0, \"b__str\":\"yes\"}";
     assert_eq!(String::from_utf8_lossy(&output), expected_output);
 
-    let schema = &reconciliating_stream.schema;
+    let schema = &reconciliating_stream.schema();
     println!("Schema: {:?}", schema);
 }
 
@@ -747,13 +747,13 @@ fn test_exclusion_of_null_fields() {
 
     let mut reconciliating_stream = JsonsorStream::new(
         init_schema,
-        JsonsorConfig {
+        Arc::new(JsonsorConfig {
             field_name_processors: vec![],
             heterogeneous_array_strategy: HeterogeneousArrayStrategy::WrapInObject,
             exclude_null_fields: true,
             input_buffer_size: 8192,
             output_buffer_size: 8192,
-        },
+        }),
     );
 
     let (output, is_complete_obj, offset) = reconciliating_stream.write_raw(input);
@@ -775,7 +775,7 @@ fn test_exclusion_of_null_fields() {
     let mut details_schema = std::collections::HashMap::new();
     details_schema.insert(b"city".to_vec(), JsonsorFieldType::String);
     expected_schema.insert(b"details".to_vec(), JsonsorFieldType::Object { schema: Arc::new(details_schema) });
-    assert_eq!(reconciliating_stream.schema, Arc::new(expected_schema));
+    assert_eq!(reconciliating_stream.schema(), &Arc::new(expected_schema));
 }
 
 #[test]
@@ -786,13 +786,13 @@ fn test_exclusion_of_null_values_in_arrays() {
 
     let mut reconciliating_stream = JsonsorStream::new(
         init_schema,
-        JsonsorConfig {
+        Arc::new(JsonsorConfig {
             field_name_processors: vec![],
             heterogeneous_array_strategy: HeterogeneousArrayStrategy::WrapInObject,
             exclude_null_fields: true,
             input_buffer_size: 8192,
             output_buffer_size: 8192,
-        },
+        }),
     );
 
     let (output, is_complete_obj, offset) = reconciliating_stream.write_raw(input);

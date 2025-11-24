@@ -98,8 +98,7 @@ pub struct JsonsorStream {
     config: Arc<JsonsorConfig>,
     nested_level: usize,
     stack: Vec<JsonsorStream>,
-    // TODO :is it ok to expose struct fields like this for the lib?
-    pub schema: Arc<HashMap<Vec<u8>, JsonsorFieldType>>,
+    schema: Arc<HashMap<Vec<u8>, JsonsorFieldType>>,
     current_field_buf: Vec<u8>,
     current_field_name_buf: Vec<u8>,
     current_status: JsonsorStreamStatus,
@@ -111,10 +110,10 @@ pub struct JsonsorStream {
 impl JsonsorStream {
     pub fn new(
         schema: HashMap<Vec<u8>, JsonsorFieldType>,
-        config: JsonsorConfig,
+        config: Arc<JsonsorConfig>,
     ) -> Self {
         Self {
-            config: Arc::new(config),
+            config: config,
             nested_level: 0,
             stack: Vec::new(),
             schema: Arc::new(schema),
@@ -163,6 +162,14 @@ impl JsonsorStream {
             previous_char: b'\0',
             has_previous_field: false,
         }
+    }
+
+    pub fn config(&self) -> &JsonsorConfig {
+        &self.config
+    }
+
+    pub fn schema(&self) -> &Arc<HashMap<Vec<u8>, JsonsorFieldType>> {
+        &self.schema
     }
 
     pub fn write_raw(&mut self, chunk: &[u8]) -> (Vec<u8>, bool, usize) {
