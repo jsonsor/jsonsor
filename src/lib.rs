@@ -4,6 +4,7 @@ use mimalloc::MiMalloc;
 static GLOBAL: MiMalloc = MiMalloc;
 
 mod chunk;
+pub mod schema;
 pub mod stream;
 pub mod field_func;
 pub mod jsonsor;

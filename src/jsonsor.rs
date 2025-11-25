@@ -5,7 +5,8 @@ use std::sync::Arc;
 use flate2::read::GzDecoder;
 
 use crate::chunk::JsonsorChunk;
-use crate::stream::{JsonsorConfig, JsonsorFieldType, JsonsorStream};
+use crate::schema::JsonsorFieldType;
+use crate::stream::{JsonsorConfig, JsonsorStream};
 
 
 

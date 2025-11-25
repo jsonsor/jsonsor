@@ -1,9 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
-use jsonsor::{field_func::{LowercaseFieldNameProcessor, ReplaceCharsFieldNameProcessor}, stream::{HeterogeneousArrayStrategy, JsonsorConfig, JsonsorFieldType, JsonsorStream}};
+use jsonsor::{field_func::{LowercaseFieldNameProcessor, ReplaceCharsFieldNameProcessor}, schema::JsonsorFieldType, stream::{HeterogeneousArrayStrategy, JsonsorConfig, JsonsorStream}};
 
-
-// TODO: Switch to Jsonsor API
 
 #[test]
 fn test_reconcile_case1() {

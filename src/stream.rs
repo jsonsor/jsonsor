@@ -1,58 +1,12 @@
-use core::fmt;
 use std::collections::HashMap;
 use std::io::Write;
 use std::mem::discriminant;
 use std::sync::{Arc};
 
 use crate::chunk::JsonsorChunk;
+use crate::schema::JsonsorFieldType;
 
 
-#[derive(PartialEq, Eq, Clone)]
-pub enum JsonsorFieldType {
-    Number,
-    String,
-    Boolean,
-    Null,
-    Object {
-        schema: Arc<HashMap<Vec<u8>, JsonsorFieldType>>,
-    },
-    Array {
-        item_type: Box<JsonsorFieldType>,
-    },
-}
-
-impl fmt::Display for JsonsorFieldType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            JsonsorFieldType::Null => write!(f, "Null"),
-            JsonsorFieldType::Boolean => write!(f, "Boolean"),
-            JsonsorFieldType::Number => write!(f, "Number"),
-            JsonsorFieldType::String => write!(f, "String"),
-            JsonsorFieldType::Array { item_type } => {
-                write!(f, "Array of {}", item_type)
-            }
-            JsonsorFieldType::Object { schema } => {
-                write!(f, "Object with fields: [")?;
-                for (key, value) in schema.iter() {
-                    write!(f, "'{}': {}, ", String::from_utf8_lossy(key), value)?;
-                }
-                write!(f, "]")
-            }
-        }
-    }
-}
-
-impl JsonsorFieldType {
-    pub fn is_primitive(&self) -> bool {
-        matches!(self, JsonsorFieldType::Number | JsonsorFieldType::String | JsonsorFieldType::Boolean | JsonsorFieldType::Null)
-    }
-}
-
-impl fmt::Debug for JsonsorFieldType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(self, f)
-    }
-}
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum JsonsorStreamStatus {

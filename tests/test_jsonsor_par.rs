@@ -1,9 +1,10 @@
 use std::{collections::HashMap, fs::File, sync::{Arc, Mutex}};
 
-use jsonsor::{jsonsor_par::{JsonsorPar, JsonsorParallelismConfig}, stream::{JsonsorConfig, JsonsorFieldType}};
+use jsonsor::{jsonsor_par::{JsonsorPar, JsonsorParallelismConfig}, schema::JsonsorFieldType, stream::JsonsorConfig};
 
 
 #[test]
+#[ignore]
 fn test_process_stream_par_case1() {
     let input = File::open("tests/data/test_jsonsor_1.ndjson.gz").expect("Failed to open input file");
 

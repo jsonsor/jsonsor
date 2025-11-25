@@ -3,7 +3,7 @@ use std::{collections::HashMap, io::{Read, Write}, sync::Arc, thread::spawn};
 use arrow::{array::{RecordBatchReader}, ipc::writer::StreamWriter, json::ReaderBuilder};
 use io_pipe::pipe;
 
-use crate::{jsonsor::Jsonsor, stream::{JsonsorConfig, JsonsorFieldType}};
+use crate::{jsonsor::Jsonsor, schema::JsonsorFieldType, stream::JsonsorConfig};
 
 #[cfg(feature = "ffi")]
 use arrow::{ffi::FFI_ArrowSchema, ffi_stream::FFI_ArrowArrayStream};

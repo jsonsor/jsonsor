@@ -1,6 +1,6 @@
 use std::{collections::HashMap, io::Cursor, sync::Arc};
 
-use jsonsor::{jsonsor::Jsonsor, stream::{JsonsorConfig, JsonsorFieldType}};
+use jsonsor::{jsonsor::Jsonsor, schema::JsonsorFieldType, stream::JsonsorConfig};
 
 #[test]
 fn test_process_stream_case1() {
