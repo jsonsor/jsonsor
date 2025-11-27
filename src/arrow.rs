@@ -33,6 +33,10 @@ pub fn jsonsor_schema_to_arrow_schema(
                 let inner_schema = jsonsor_schema_to_arrow_schema(schema.clone());
                 arrow::datatypes::DataType::Struct(inner_schema.fields().clone())
             }
+            JsonsorFieldType::Mixed { .. } => {
+                // For mixed types, we can choose to represent them as Utf8 (string) in Arrow
+                arrow::datatypes::DataType::Utf8
+            }
         }
     }
 

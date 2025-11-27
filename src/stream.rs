@@ -21,10 +21,20 @@ pub enum JsonsorStreamStatus {
     ReachedObjectEnd,
 }
 
+/// Strategy to handle heterogeneous arrays (arrays with elements of different types)
+/// Heterogeneous arrays can be:
+/// 1. Horizontally heterogeneous - elements of different types within the same array
+/// 2. Vertically heterogeneous - elements of different types across different arrays under the
+///    same field name
 #[derive(Clone, PartialEq, Eq)]
 pub enum HeterogeneousArrayStrategy {
+    /// Each Array element is wrapped in an object with a field "value". Array type is considered
+    /// as Array of Objects. Type conflicts are resolved by suffixing the field name with the type.
+    /// Supports vertically heterogeneous arrays.
     WrapInObject,
-    KeepAsIs, // Must collect information about the types inside of the array
+    /// Array elements are not reconciled (event objects inside of the Array). The Array type is 
+    /// always considered as Array of Mixed.
+    KeepAsIs,
 }
 
 pub trait FieldNameProcessor: Send + Sync {
@@ -46,6 +56,7 @@ pub enum JsonsorNestedStreamSpecificsFlag {
     None,
     ArrayValueWrapper,
     ArrayForWrapInObject,
+    ArrayForMixedTypes,
 }
 
 pub struct JsonsorStream {
@@ -111,7 +122,7 @@ impl JsonsorStream {
             current_status: JsonsorStreamStatus::SeekingArrayStart,
             specifics_flag: match self.config.heterogeneous_array_strategy {
                 HeterogeneousArrayStrategy::WrapInObject => JsonsorNestedStreamSpecificsFlag::ArrayForWrapInObject,
-                HeterogeneousArrayStrategy::KeepAsIs => JsonsorNestedStreamSpecificsFlag::None,
+                HeterogeneousArrayStrategy::KeepAsIs => JsonsorNestedStreamSpecificsFlag::ArrayForMixedTypes,
             },
             previous_char: b'\0',
             has_previous_field: false,
@@ -177,10 +188,19 @@ impl JsonsorStream {
         let obj_type = JsonsorFieldType::Object {
             schema: Arc::new(HashMap::new()),
         };
-        let arr_obj_type = JsonsorFieldType::Array {
-            item_type: Box::new(JsonsorFieldType::Object {
-                schema: Arc::new(HashMap::new()),
-            }),
+
+        let arr_type = if self.config.heterogeneous_array_strategy == HeterogeneousArrayStrategy::WrapInObject {
+            JsonsorFieldType::Array {
+                item_type: Box::new(JsonsorFieldType::Object {
+                    schema: Arc::new(HashMap::new()),
+                }),
+            }
+        } else {
+            JsonsorFieldType::Array {
+                item_type: Box::new(JsonsorFieldType::Mixed {
+                    item_types: vec![],
+                }),
+            }
         };
         let mut cursor = 0;
 
@@ -308,7 +328,6 @@ impl JsonsorStream {
                                 },
                             );
 
-
                             let (is_complete_obj, processed_bytes_num) =
                                 nested_stream.write(&chunk.starting_from(cursor), out);
                             let inferred_type = JsonsorFieldType::Object {
@@ -321,12 +340,10 @@ impl JsonsorStream {
                                 self.stack.push(nested_stream);
                             }
 
-                            // TODO: decrement by 1 because the output shift is rather a number of
-                            // processed bytes, not the cursor shift
                             (inferred_type, processed_bytes_num - 1, is_type_modified_during_type_inference)
                         }
                         b'[' => {
-                            self.commit_field_name(&arr_obj_type, out);
+                            self.commit_field_name(&arr_type, out);
 
                             let expected_field_type = self.schema.get(&self.current_field_name_buf);
 
@@ -398,15 +415,54 @@ impl JsonsorStream {
                     };
 
                     if dtype != JsonsorFieldType::Null && should_schema_be_modified {
-                        Arc::make_mut(&mut self.schema)
-                            .insert(self.current_field_name_buf.clone(), dtype.clone());
+                        // TODO: Reconsider. Not optimal.
+                        let mut target_dtype = dtype;
+                        if self.specifics_flag == JsonsorNestedStreamSpecificsFlag::ArrayForMixedTypes {
+                            let existing_item_type = self.schema.get(&self.current_field_name_buf);
+                            match existing_item_type {
+                                Some(JsonsorFieldType::Mixed { item_types }) => {
+                                    // TODO: Merge nested structs???
+                                    if !item_types.contains(&target_dtype) {
+                                        target_dtype = JsonsorFieldType::Mixed {
+                                            item_types: {
+                                                let mut new_item_types = item_types.clone();
+                                                new_item_types.push(target_dtype);
+                                                new_item_types
+                                            },
+                                        };
+                                    } else {
+                                        target_dtype = existing_item_type.unwrap().clone();
+                                    }
+                                }
+                                Some(other_type) => {
+                                    if *other_type == target_dtype {
+                                        target_dtype = JsonsorFieldType::Mixed {
+                                            item_types: vec![other_type.clone()],
+                                        };
+                                    } else {
+                                        target_dtype = JsonsorFieldType::Mixed {
+                                            item_types: vec![other_type.clone(), target_dtype],
+                                        };
+                                    }
+                                }
+                                None => {
+                                    target_dtype = JsonsorFieldType::Mixed {
+                                        item_types: vec![target_dtype.clone()],
+                                    };
+                                }
+                            }
+                        }
+
                         println!(
                             "{}[{}] Field '{}' type {} differs from the schema. Schema is updated",
                             "\t".repeat(self.nested_level),
                             cursor,
                             String::from_utf8_lossy(&self.current_field_name_buf),
-                            dtype
+                            &target_dtype
                         );
+
+                        Arc::make_mut(&mut self.schema)
+                            .insert(self.current_field_name_buf.clone(), target_dtype);
                     } else {
                         println!(
                             "{}[{}] Field '{}' type {} matches the schema",
@@ -524,14 +580,14 @@ impl JsonsorStream {
         return (self.current_status == JsonsorStreamStatus::SeekingObjectStart, cursor);
     }
 
-    // returns true if the schema is logically updated (field name was suffixed or new field)
+    /// returns true if the schema is logically updated (field name was suffixed or new field)
     fn commit_field_name<W: Write>(&mut self, target_type: &JsonsorFieldType, out: &mut W) -> bool {
         if !(self.config.exclude_null_fields && *target_type == JsonsorFieldType::Null) {
-            // TODO: Get via args
             let expected_field_type = self.schema.get(&self.current_field_name_buf);
 
+            let is_array = matches!(target_type, JsonsorFieldType::Array { item_type: _ });
             let mut should_be_suffixed = self.config.heterogeneous_array_strategy == HeterogeneousArrayStrategy::WrapInObject &&
-                matches!(target_type, JsonsorFieldType::Array { item_type: _ });
+                is_array;
 
             if should_be_suffixed {
                 println!(
@@ -542,6 +598,14 @@ impl JsonsorStream {
             }
 
             if !should_be_suffixed {
+                println!(
+                    "{} Checking field '{}' of type {} against the schema type {:?}",
+                    "\t".repeat(self.nested_level),
+                    String::from_utf8_lossy(&self.current_field_name_buf),
+                    target_type,
+                    expected_field_type
+                );
+
                 if let Some(expected_type) = expected_field_type {
                     if self.types_differ(target_type, expected_type) {
                         println!(
@@ -557,7 +621,6 @@ impl JsonsorStream {
             }
 
             if should_be_suffixed {
-
                 println!(
                     "{} Suffixing field '{}' of type {}",
                     "\t".repeat(self.nested_level),
@@ -591,6 +654,8 @@ impl JsonsorStream {
         return false;
     }
 
+
+    /// determine the type of the parent field that was updated by the nested stream
     fn update_current_field_schema(&mut self, updated_schema: &Arc<HashMap<Vec<u8>, JsonsorFieldType>>) {
         let updated_nested_type = match self.schema.get(&self.current_field_name_buf) {
             Some(JsonsorFieldType::Object { schema: _ }) => JsonsorFieldType::Object {
@@ -602,8 +667,36 @@ impl JsonsorStream {
                                .cloned()
                                .unwrap_or(JsonsorFieldType::Null)),
             },
+            Some(JsonsorFieldType::Mixed { item_types }) => {
+                let mut new_item_types = item_types[..item_types.len().saturating_sub(1)].to_vec().clone();
+                let last_element = item_types
+                    .last()
+                    .cloned()
+                    .expect("Mixed type must have at least one item type");
+
+                new_item_types.push(
+                    if discriminant(&last_element) == discriminant(&JsonsorFieldType::Object { schema: Arc::new(HashMap::new()) }) {
+                        JsonsorFieldType::Object {
+                            schema: updated_schema.clone(),
+                        }
+                    } else {
+                        JsonsorFieldType::Array {
+                            item_type: Box::new(
+                                updated_schema
+                                    .get(&vec![])
+                                    .cloned()
+                                    .unwrap_or(JsonsorFieldType::Null)
+                            ),
+                        }
+                    }
+                );
+
+                JsonsorFieldType::Mixed {
+                    item_types: new_item_types,
+                }
+            }
             None => panic!("Field for the nested stream not found in the schema"),
-            _ => panic!("Unsupported field type for nested object"),
+            unsupposed_type => panic!("Unsupported field type.\nExisting type: {:?}\nUpdated type: {:?}", unsupposed_type, updated_schema),
         };
         Arc::make_mut(&mut self.schema).insert(
             self.current_field_name_buf.clone(),
@@ -621,6 +714,7 @@ impl JsonsorStream {
             JsonsorFieldType::Array { item_type } => {
                 String::from("__arr") + &self.type_suffix(&*item_type)
             }
+            JsonsorFieldType::Mixed { item_types: _ } => String::from("__mix"),
         }
     }
 
@@ -629,12 +723,12 @@ impl JsonsorStream {
             || match (dtype1, dtype2) {
                 (
                     JsonsorFieldType::Array {
-                        item_type: expected_item_type,
+                        item_type: dtype1_item_type,
                     },
                     JsonsorFieldType::Array {
-                        item_type: dtype_item_type,
+                        item_type: dtype2_item_type,
                     },
-                ) => self.types_differ(&*expected_item_type, &*dtype_item_type),
+                ) => self.types_differ(&*dtype1_item_type, &*dtype2_item_type),
                 _ => false,
             }
     }

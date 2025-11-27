@@ -12,6 +12,9 @@ pub enum JsonsorFieldType {
     Array {
         item_type: Box<JsonsorFieldType>,
     },
+    Mixed {
+        item_types: Vec<JsonsorFieldType>,
+    },
 }
 
 impl Display for JsonsorFieldType {
@@ -31,6 +34,13 @@ impl Display for JsonsorFieldType {
                 }
                 write!(f, "]")
             }
+            JsonsorFieldType::Mixed { item_types } => {
+                write!(f, "Mixed of [")?;
+                for item_type in item_types.iter() {
+                    write!(f, "{}, ", item_type)?;
+                }
+                write!(f, "]")
+            }
         }
     }
 }
@@ -46,3 +56,4 @@ impl Debug for JsonsorFieldType {
         Display::fmt(self, f)
     }
 }
+

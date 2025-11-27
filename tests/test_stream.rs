@@ -323,13 +323,16 @@ fn test_reconcile_nested_obj_case1() {
 
 #[test]
 fn test_reconcile_nested_arr_case1() {
-    let input = b"{\"items\": [1, 2, 3], \"details\": [{\"name\": \"Item1\", \"price\": 19.99}, {\"name\": \"Item2\", \"price\": 29.99}]}";
+    let input = b"{\"str_items\": [\"one\", \"two\"], \"bool_items\": [true, false, true], \"items\": [1, 2, 3], \"details\": [{\"name\": \"Item1\", \"price\": 19.99}, {\"name\": \"Item2\", \"price\": 29.99}]}";
     let mut init_schema = std::collections::HashMap::new();
-    init_schema.insert(b"items".to_vec(), JsonsorFieldType::String);
+    init_schema.insert(b"str_items".to_vec(), JsonsorFieldType::Array{item_type: Box::new(JsonsorFieldType::Mixed{ item_types: vec![JsonsorFieldType::String]})});
+    init_schema.insert(b"items".to_vec(), JsonsorFieldType::Array{item_type: Box::new(JsonsorFieldType::String)});
     init_schema.insert(
         b"details".to_vec(),
         JsonsorFieldType::Array {
-            item_type: Box::new(JsonsorFieldType::String),
+            item_type: Box::new(JsonsorFieldType::Mixed { item_types: vec![
+                JsonsorFieldType::Object { schema: Arc::new(HashMap::new()) }
+            ]}),
         },
     );
 
@@ -349,9 +352,7 @@ fn test_reconcile_nested_arr_case1() {
     println!("Output: {:?}", String::from_utf8_lossy(&output));
     println!("Schema: {:?}", reconciliating_stream.schema());
 
-    // TODO: Doesn't really work. items__arr__obj should be iteams__arr__num
-    // It happens because the array type is hardcoded. No way to check the actual type in advance.
-    let expected_output = "{\"items__arr__obj\":[1,2,3], \"details__arr__obj\":[{\"name\":\"Item1\", \"price\":19.99},{\"name\":\"Item2\", \"price\":29.99}]}";
+    let expected_output = "{\"str_items\":[\"one\",\"two\"], \"bool_items\":[true,false,true], \"items__arr__mix\":[1,2,3], \"details\":[{\"name\":\"Item1\", \"price\":19.99},{\"name\":\"Item2\", \"price\":29.99}]}";
     assert_eq!(String::from_utf8_lossy(&output), expected_output);
 }
 
@@ -412,6 +413,53 @@ fn test_reconcile_heterogeneous_arr_case1() {
 
     let expected_output = "{\"values__arr__obj\":[{\"value\":1},{\"value__str\":\"two\"},{\"value\":3.0},{\"value__bool\":true},{\"value__obj\":{\"key\":\"value\"}}]}";
     assert_eq!(String::from_utf8_lossy(&output), expected_output);
+}
+
+#[test]
+fn test_reconcile_heterogeneous_arr_case2() {
+    let input = b"{\"values\": [1, \"two\", 3.0, true, {\"key\": \"value\"}]}";
+    let init_schema = std::collections::HashMap::new();
+
+    let mut reconciliating_stream = JsonsorStream::new(
+        init_schema,
+        Arc::new(JsonsorConfig {
+            field_name_processors: vec![],
+            heterogeneous_array_strategy: HeterogeneousArrayStrategy::KeepAsIs,
+            input_buffer_size: 8192,
+            output_buffer_size: 8192,
+            exclude_null_fields: false,
+        }),
+    );
+    let (output, completed, offset) = reconciliating_stream.write_raw(input);
+    assert_eq!(offset, input.len());
+    assert!(completed);
+    println!("Output: {:?}", String::from_utf8_lossy(&output));
+    println!("Schema: {:?}", reconciliating_stream.schema());
+
+    let expected_output = "{\"values\":[1,\"two\",3.0,true,{\"key\":\"value\"}]}";
+    assert_eq!(String::from_utf8_lossy(&output), expected_output);
+
+    let expected_schema = {
+        let mut schema = std::collections::HashMap::new();
+        schema.insert(b"values".to_vec(),
+            JsonsorFieldType::Array {
+                item_type: Box::new(JsonsorFieldType::Mixed { 
+                    item_types: vec![
+                        JsonsorFieldType::Number, 
+                        JsonsorFieldType::String,
+                        JsonsorFieldType::Boolean,
+                        JsonsorFieldType::Object { schema: {
+                            let mut obj_schema = HashMap::new();
+                            obj_schema.insert(b"key".to_vec(), JsonsorFieldType::String);
+                            Arc::new(obj_schema)
+                        } }
+                    ] 
+                }),
+            }
+        );
+        Arc::new(schema)
+    };
+    assert_eq!(reconciliating_stream.schema(), &expected_schema);
 }
 
 #[test]
@@ -575,9 +623,9 @@ fn test_streaming_reconciliation3() {
     print_schema(&reconciliating_stream.schema());
     assert_eq!(String::from_utf8_lossy(&output3), ",{\"id\":2");
 
-    let (output4, _, _) = reconciliating_stream.write_raw(b", \"value__num\":200}, {\"id\": 3, \"value\": true}");
+    let (output4, _, _) = reconciliating_stream.write_raw(b", \"value\":200}, {\"id\": 3, \"value\": true}");
     print_schema(&reconciliating_stream.schema());
-    assert_eq!(String::from_utf8_lossy(&output4), ", \"value__num\":200},{\"id\":3, \"value__bool\":true}");
+    assert_eq!(String::from_utf8_lossy(&output4), ", \"value\":200},{\"id\":3, \"value\":true}");
 
     let (output5, _, _) = reconciliating_stream.write_raw(b"]}");
     print_schema(&reconciliating_stream.schema());
