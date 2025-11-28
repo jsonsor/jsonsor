@@ -17,6 +17,13 @@ mimalloc = { version = "0.1.48", features = ["v3"] }
 arrow = { version = "57", features = ["json", "ffi"], optional = true }
 io-pipe = { version = "0.7.3", optional = true }
 
+[dev-dependencies]
+criterion = { version = "0.5" }
+
+[[bench]]
+name = "bench1"
+harness = false
+
 [profile.release]
 opt-level = 3
 lto = "fat"
