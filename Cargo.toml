@@ -2,6 +2,10 @@
 name = "jsonsor"
 version = "0.1.0"
 edition = "2021"
+authors = ["ev@ekozhevnikov.com"]
+description = "A high-performance JSON schema reconciliation and data harmonization library"
+license = "MIT"
+repository = "git@github.com:jsonsor/jsonsor.git"
 
 [lib]
 crate-type = ["lib", "cdylib"]
