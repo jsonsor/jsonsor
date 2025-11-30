@@ -2,7 +2,9 @@
 
 > Streaming library for JSON schema reconciliation and data harmonization
 
-Status: Pre-Alpha (proof of concept)
+[![Build](https://github.com/ekvii/jsonsor/actions/workflows/rust.yml/badge.svg?branch=main)](https://github.com/ekvii/jsonsor/actions/workflows/rust.yml)
+
+Status: Alpha
 
 Reconciles the following challenges when working with JSON data:
 
