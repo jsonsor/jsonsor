@@ -16,7 +16,7 @@ jobs:
   build:
     # For push events: skip if it's a release commit.
     # For pull_request: always run (no head_commit there).
-    if: github.event_name != 'push' || !contains(github.event.head_commit.message, 'chore: Release')
+    if: github.event_name != 'push' or !contains(github.event.head_commit.message, 'chore: Release')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
