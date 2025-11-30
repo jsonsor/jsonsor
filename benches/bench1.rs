@@ -1,20 +1,22 @@
-use std::fs::File;
+use std::{fs::File, sync::Arc};
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
-use jsonsor::jsonsor::Jsonsor;
+use jsonsor::{field_func::{LowercaseFieldNameProcessor, ReplaceCharsFieldNameProcessor}, jsonsor::Jsonsor};
 
 fn bench_process_ndjson(c: &mut Criterion) {
-    // Path to your gzipped NDJSON file
-    let path = "benches/bench1.sample.ndjson";
+    let path = "benches/bench1.sample.ndjson.gz";
 
     c.bench_with_input(BenchmarkId::new("bench1", path), &path, |b, i| {
         let init_schema = std::collections::HashMap::new();
         let config = jsonsor::stream::JsonsorConfig {
-            field_name_processors: vec![],
+            field_name_processors: vec![
+                Arc::new(LowercaseFieldNameProcessor {}),
+                Arc::new(ReplaceCharsFieldNameProcessor::new(" \t\n\r,.;{}()=", "_")),
+            ],
             heterogeneous_array_strategy: jsonsor::stream::HeterogeneousArrayStrategy::WrapInObject,
             exclude_null_fields: true,
-            input_buffer_size: 1024 * 1024,
-            output_buffer_size: 1024 * 1024,
+            input_buffer_size: 8 * 1024,
+            output_buffer_size: 8 * 1024,
         };
         let mut jsonsor = Jsonsor::new(init_schema, config);
         let mut input = File::open(i).expect("Failed to open file");
