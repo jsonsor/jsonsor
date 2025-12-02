@@ -16,7 +16,7 @@ jobs:
   build:
     # For push events: skip if it's a release commit.
     # For pull_request: always run (no head_commit there).
-    if: ${{ github.event_name != 'push' || contains(github.event.head_commit.message, 'chore: Release') == false }}
+    # if: "!contains(github.event.head_commit.message, 'chore: Release')"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -41,32 +41,32 @@ jobs:
       - name: Run tests
         run: cargo test --verbose
 
-  release:
-    if: github.event_name == 'push' &&
-        github.ref == 'refs/heads/main' &&
-        !contains(github.event.head_commit.message, 'chore: Release')
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          # cargo-release needs full history and tags
-          fetch-depth: 0
+  # release:
+  #   if: github.event_name == 'push' &&
+  #       github.ref == 'refs/heads/main' &&
+  #       !contains(github.event.head_commit.message, 'chore: Release')
+  #   needs: build
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #       with:
+  #         # cargo-release needs full history and tags
+  #         fetch-depth: 0
 
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+  #     - name: Set up Rust
+  #       uses: dtolnay/rust-toolchain@stable
 
-      - name: Configure git user
-        run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+  #     - name: Configure git user
+  #       run: |
+  #         git config user.name  "github-actions[bot]"
+  #         git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Install cargo-release
-        run: cargo install cargo-release --locked
+  #     - name: Install cargo-release
+  #       run: cargo install cargo-release --locked
 
-      - name: Bump version and publish
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_API_TOKEN }}
-        run: |
-          cargo release minor --no-confirm --execute
-          # add --workspace if you use a workspace
+  #     - name: Bump version and publish
+  #       env:
+  #         CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_API_TOKEN }}
+  #       run: |
+  #         cargo release minor --no-confirm --execute
+  #         # add --workspace if you use a workspace
